@@ -29,8 +29,8 @@
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/slab.h>
-#include <linux/wakelock.h>
 #include <linux/workqueue.h>
+#include <linux/pm_wakeup.h>
 #include <linux/alarmtimer.h>
 #include <linux/timer.h>
 #include <linux/debugfs.h>
@@ -47,8 +47,8 @@ struct android_bat_data {
 
 	struct power_supply	psy_bat;
 
-	struct wake_lock	monitor_wake_lock;
-	struct wake_lock	charger_wake_lock;
+	struct wakeup_source	monitor_wake_lock;
+	struct wakeup_source	charger_wake_lock;
 
 	int			charge_source;
 
@@ -240,7 +240,7 @@ static void android_bat_charge_source_changed(struct android_bat_callbacks *ptr,
 	struct android_bat_data *battery;
 
 	battery = container_of(ptr, struct android_bat_data, callbacks);
-	wake_lock(&battery->charger_wake_lock);
+	__pm_stay_awake(&battery->charger_wake_lock);
 	battery->charge_source = charge_source;
 
 	pr_info("battery: charge source type was changed: %s\n",
@@ -270,8 +270,7 @@ static void android_bat_charger_work(struct work_struct *work)
 		pr_err("%s: Invalid charger type\n", __func__);
 		break;
 	}
-
-	wake_lock_timeout(&battery->charger_wake_lock, HZ * 2);
+	__pm_wakeup_event(&battery->charger_wake_lock, 2*MSEC_PER_SEC);
 }
 
 
@@ -287,7 +286,7 @@ static void android_bat_monitor_work(struct work_struct *work)
 	struct android_bat_data *battery;
 	battery = container_of(work, struct android_bat_data, monitor_work);
 
-	wake_lock(&battery->monitor_wake_lock);
+	__pm_stay_awake(&battery->monitor_wake_lock);
 	android_bat_update_data(battery);
 
 	switch (battery->charging_status) {
@@ -339,7 +338,7 @@ static void android_bat_monitor_work(struct work_struct *work)
 	power_supply_changed(&battery->psy_bat);
 	battery->last_poll = ktime_get_boottime();
 	android_bat_monitor_set_alarm(battery, FAST_POLL);
-	wake_unlock(&battery->monitor_wake_lock);
+	__pm_relax(&battery->monitor_wake_lock);
 	return;
 }
 
@@ -349,7 +348,7 @@ static enum alarmtimer_restart android_bat_monitor_alarm(
 	struct android_bat_data *battery =
 		container_of(alarm, struct android_bat_data, monitor_alarm);
 
-	wake_lock(&battery->monitor_wake_lock);
+	__pm_stay_awake(&battery->monitor_wake_lock);
 	queue_work(battery->monitor_wqueue, &battery->monitor_work);
 	return ALARMTIMER_NORESTART;
 }
@@ -412,9 +411,9 @@ static __devinit int android_bat_probe(struct platform_device *pdev)
 	battery->batt_vcell = -1;
 	battery->batt_soc = -1;
 
-	wake_lock_init(&battery->monitor_wake_lock, WAKE_LOCK_SUSPEND,
+	wakeup_source_init(&battery->monitor_wake_lock,
 			"android-battery-monitor");
-	wake_lock_init(&battery->charger_wake_lock, WAKE_LOCK_SUSPEND,
+	wakeup_source_init(&battery->charger_wake_lock,
 			"android-chargerdetect");
 
 	ret = power_supply_register(&pdev->dev, &battery->psy_bat);
@@ -444,10 +443,10 @@ static __devinit int android_bat_probe(struct platform_device *pdev)
 	if (battery->pdata->poll_charge_source)
 		battery->charge_source = battery->pdata->poll_charge_source();
 
-	wake_lock(&battery->charger_wake_lock);
+	__pm_stay_awake(&battery->charger_wake_lock);
 	queue_work(battery->monitor_wqueue, &battery->charger_work);
 
-	wake_lock(&battery->monitor_wake_lock);
+	__pm_stay_awake(&battery->monitor_wake_lock);
 	battery->last_poll = ktime_get_boottime();
 	alarm_init(&battery->monitor_alarm, ALARM_BOOTTIME,
 		   android_bat_monitor_alarm);
@@ -464,8 +463,8 @@ static __devinit int android_bat_probe(struct platform_device *pdev)
 err_wq:
 	power_supply_unregister(&battery->psy_bat);
 err_psy_reg:
-	wake_lock_destroy(&battery->monitor_wake_lock);
-	wake_lock_destroy(&battery->charger_wake_lock);
+	wakeup_source_trash(&battery->monitor_wake_lock);
+	wakeup_source_trash(&battery->charger_wake_lock);
 err_pdata:
 	kfree(battery);
 
@@ -480,8 +479,8 @@ static int __devexit android_bat_remove(struct platform_device *pdev)
 	flush_workqueue(battery->monitor_wqueue);
 	destroy_workqueue(battery->monitor_wqueue);
 	power_supply_unregister(&battery->psy_bat);
-	wake_lock_destroy(&battery->monitor_wake_lock);
-	wake_lock_destroy(&battery->charger_wake_lock);
+	wakeup_source_trash(&battery->monitor_wake_lock);
+	wakeup_source_trash(&battery->charger_wake_lock);
 	debugfs_remove(battery->debugfs_entry);
 	kfree(battery);
 	return 0;
