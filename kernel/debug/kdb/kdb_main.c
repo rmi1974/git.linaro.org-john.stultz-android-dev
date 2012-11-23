@@ -12,6 +12,7 @@
  */
 
 #include <linux/ctype.h>
+#include <linux/types.h>
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/kmsg_dump.h>
@@ -23,6 +24,7 @@
 #include <linux/vmalloc.h>
 #include <linux/atomic.h>
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/kallsyms.h>
@@ -41,6 +43,12 @@
 #include <linux/uaccess.h>
 #include <linux/slab.h>
 #include "kdb_private.h"
+
+#undef	MODULE_PARAM_PREFIX
+#define	MODULE_PARAM_PREFIX "kdb."
+
+static bool kdb_kiosk;
+module_param_named(kiosk, kdb_kiosk, bool, 0600);
 
 #define GREP_LEN 256
 char kdb_grep_string[GREP_LEN];
@@ -121,6 +129,7 @@ static kdbmsg_t kdbmsgs[] = {
 	KDBMSG(BADLENGTH, "Invalid length field"),
 	KDBMSG(NOBP, "No Breakpoint exists"),
 	KDBMSG(BADADDR, "Invalid address"),
+	KDBMSG(NOPERM, "Permission denied"),
 };
 #undef KDBMSG
 
@@ -1003,6 +1012,14 @@ int kdb_parse(const char *cmdstr)
 
 	if (i < kdb_max_commands) {
 		int result;
+
+		if (kdb_kiosk) {
+			if (!(tp->cmd_flags & (KDB_SAFE | KDB_SAFE_NO_ARGS)))
+				return KDB_NOPERM;
+			if (tp->cmd_flags & KDB_SAFE_NO_ARGS && argc > 1)
+				return KDB_NOPERM;
+		}
+
 		KDB_STATE_SET(CMD);
 		result = (*tp->cmd_func)(argc-1, (const char **)argv);
 		if (result && ignore_errors && result > KDB_CMD_GO)
@@ -1025,7 +1042,7 @@ int kdb_parse(const char *cmdstr)
 	 * obtaining the address of a variable, or the nearest symbol
 	 * to an address contained in a register.
 	 */
-	{
+	if (!kdb_kiosk) {
 		unsigned long value;
 		char *name = NULL;
 		long offset;
@@ -1041,6 +1058,7 @@ int kdb_parse(const char *cmdstr)
 		kdb_printf("\n");
 		return 0;
 	}
+	return KDB_NOPERM;
 }
 
 
