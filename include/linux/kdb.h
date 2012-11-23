@@ -16,6 +16,8 @@
 typedef enum {
 	KDB_REPEAT_NO_ARGS	= 0x1, /* Repeat the command w/o arguments */
 	KDB_REPEAT_WITH_ARGS	= 0x2, /* Repeat the command w/ its arguments */
+	KDB_SAFE		= 0x4, /* Security-wise safe command */
+	KDB_SAFE_NO_ARGS	= 0x8, /* Only safe if run w/o arguments */
 } kdb_cmdflags_t;
 
 typedef int (*kdb_func_t)(int, const char **);
