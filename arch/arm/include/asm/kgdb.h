@@ -11,6 +11,8 @@
 #define __ARM_KGDB_H__
 
 #include <linux/ptrace.h>
+#include <linux/linkage.h>
+#include <asm/exception.h>
 
 /*
  * GDB assumes that we're a user process being debugged, so
@@ -47,6 +49,11 @@ static inline void arch_kgdb_breakpoint(void)
 extern void kgdb_handle_bus_error(void);
 extern int kgdb_fault_expected;
 
+extern char kgdb_fiq_handler;
+extern char kgdb_fiq_handler_end;
+asmlinkage void __exception_irq_entry kgdb_fiq_do_handle(struct pt_regs *regs);
+extern int __init kgdb_register_fiq(void (*mach_kgdb_enable_fiq)(bool on),
+				    bool (*mach_is_kgdb_fiq)(void));
 #endif /* !__ASSEMBLY__ */
 
 /*
