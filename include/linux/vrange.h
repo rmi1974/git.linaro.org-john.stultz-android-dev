@@ -8,6 +8,8 @@
 #define VRANGE_VOLATILE 1
 #define VRANGE_VALID_FLAGS (0) /* Don't yet support any flags */
 
+extern int discard_vpage(struct page *page);
+
 static inline swp_entry_t swp_entry_mk_vrange_purged(void)
 {
 	return swp_entry(SWP_VRANGE_PURGED, 0);
