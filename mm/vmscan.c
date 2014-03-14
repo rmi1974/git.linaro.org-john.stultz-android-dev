@@ -155,9 +155,8 @@ static unsigned long zone_reclaimable_pages(struct zone *zone)
 	nr = zone_page_state(zone, NR_ACTIVE_FILE) +
 	     zone_page_state(zone, NR_INACTIVE_FILE);
 
-	if (get_nr_swap_pages() > 0)
-		nr += zone_page_state(zone, NR_ACTIVE_ANON) +
-		      zone_page_state(zone, NR_INACTIVE_ANON);
+	nr += zone_page_state(zone, NR_ACTIVE_ANON) +
+	      zone_page_state(zone, NR_INACTIVE_ANON);
 
 	return nr;
 }
@@ -1764,13 +1763,6 @@ static int inactive_anon_is_low_global(struct zone *zone)
  */
 static int inactive_anon_is_low(struct lruvec *lruvec)
 {
-	/*
-	 * If we don't have swap space, anonymous page deactivation
-	 * is pointless.
-	 */
-	if (!total_swap_pages)
-		return 0;
-
 	if (!mem_cgroup_disabled())
 		return mem_cgroup_inactive_anon_is_low(lruvec);
 
@@ -1879,12 +1871,6 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 		force_scan = true;
 	if (!global_reclaim(sc))
 		force_scan = true;
-
-	/* If we have no swap space, do not bother scanning anon pages. */
-	if (!sc->may_swap || (get_nr_swap_pages() <= 0)) {
-		scan_balance = SCAN_FILE;
-		goto out;
-	}
 
 	/*
 	 * Global reclaim will swap to prevent OOM even with no
@@ -2048,7 +2034,6 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 			if (nr[lru]) {
 				nr_to_scan = min(nr[lru], SWAP_CLUSTER_MAX);
 				nr[lru] -= nr_to_scan;
-
 				nr_reclaimed += shrink_list(lru, nr_to_scan,
 							    lruvec, sc);
 			}
@@ -2181,8 +2166,8 @@ static inline bool should_continue_reclaim(struct zone *zone,
 	 */
 	pages_for_compaction = (2UL << sc->order);
 	inactive_lru_pages = zone_page_state(zone, NR_INACTIVE_FILE);
-	if (get_nr_swap_pages() > 0)
-		inactive_lru_pages += zone_page_state(zone, NR_INACTIVE_ANON);
+	inactive_lru_pages += zone_page_state(zone, NR_INACTIVE_ANON);
+
 	if (sc->nr_reclaimed < pages_for_compaction &&
 			inactive_lru_pages > pages_for_compaction)
 		return true;
@@ -2725,9 +2710,6 @@ unsigned long try_to_free_mem_cgroup_pages(struct mem_cgroup *memcg,
 static void age_active_anon(struct zone *zone, struct scan_control *sc)
 {
 	struct mem_cgroup *memcg;
-
-	if (!total_swap_pages)
-		return;
 
 	memcg = mem_cgroup_iter(NULL, NULL, NULL);
 	do {
