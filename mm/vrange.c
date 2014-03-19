@@ -79,6 +79,73 @@ static int vrange_check_purged(struct mm_struct *mm,
 
 }
 
+
+/**
+ * vrange_mark_accessed_pte - Marks pte pages in range accessed
+ *
+ * Iterates over the ptes in the pmd and marks the coresponding page
+ * as accessed. This ensures all the pages in the range are of the
+ * same "age", so that when pages are purged, we will most likely purge
+ * them together.
+ */
+static int vrange_mark_accessed_pte(pmd_t *pmd, unsigned long addr,
+					unsigned long end, struct mm_walk *walk)
+{
+	struct vm_area_struct *vma = walk->private;
+	pte_t *pte;
+	spinlock_t *ptl;
+
+	if (pmd_trans_huge(*pmd))
+		return 0;
+	if (pmd_trans_unstable(pmd))
+		return 0;
+
+	pte = pte_offset_map_lock(walk->mm, pmd, addr, &ptl);
+	for (; addr != end; pte++, addr += PAGE_SIZE) {
+		if (pte_present(*pte)) {
+			struct page *page;
+
+			page = vm_normal_page(vma, addr, *pte);
+			if (IS_ERR_OR_NULL(page))
+				break;
+			get_page(page);
+			/*
+			 * XXX - So here we may want to do something
+			 * else other then marking the page accessed.
+			 * Setting them to all be the same "age" ensures
+			 * they are pruged together, but its not clear
+			 * what that "age" should be.
+			 */
+			mark_page_accessed(page);
+			put_page(page);
+		}
+	}
+	pte_unmap_unlock(pte - 1, ptl);
+	cond_resched();
+
+	return 0;
+}
+
+
+/**
+ * vrange_mark_range_accessed - Sets up a mm_walk to mark pages accessed
+ *
+ * Sets up and calls wa_page_range() to mark affected pages as accessed.
+ */
+static void vrange_mark_range_accessed(struct vm_area_struct *vma,
+						unsigned long start,
+						unsigned long end)
+{
+	struct mm_walk vrange_walk = {
+		.pmd_entry = vrange_mark_accessed_pte,
+		.mm = vma->vm_mm,
+		.private = vma,
+	};
+
+	walk_page_range(start, end, &vrange_walk);
+}
+
+
 /**
  * do_vrange - Marks or clears VMAs in the range (start-end) as VM_VOLATILE
  *
@@ -164,6 +231,10 @@ static ssize_t do_vrange(struct mm_struct *mm, unsigned long start,
 		prev = vma;
 success:
 		vma->vm_flags = new_flags;
+
+		/* Mark the vma range as accessed */
+		if (mode == VRANGE_VOLATILE)
+			vrange_mark_range_accessed(vma, start, tmp);
 
 		/* update count to distance covered so far*/
 		count = tmp - orig_start;
