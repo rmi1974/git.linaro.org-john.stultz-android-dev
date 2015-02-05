@@ -525,6 +525,13 @@ config VEXPRESS_SYSCFG
 	  bus. System Configuration interface is one of the possible means
 	  of generating transactions on this bus.
 
+config HI3660_SYSCFG
+	bool "Hisilicon HI3660 System Configuration driver"
+	default y
+	help
+	  Hisilicon HI3660 uses some registers to configure some chip hosts to
+	  work or not, e.g. disable the UART hosts reset and let's them work.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
