@@ -10,6 +10,8 @@
 /*Reserved 1MB memory for MCU*/
 /memreserve/ 0x05e00000 0x00100000;
 
+#include "hikey-pinctrl.dtsi"
+#include "hikey-gpio.dtsi"
 #include "hi6220.dtsi"
 
 / {
