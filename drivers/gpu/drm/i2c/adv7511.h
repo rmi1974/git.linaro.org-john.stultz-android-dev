@@ -248,11 +248,13 @@ struct adv7511 {
 	struct i2c_client *i2c_main;
 	struct i2c_client *i2c_edid;
 	struct i2c_client *i2c_cec;
+	struct i2c_client *i2c_packet;
 
 	int irq;
 
 	struct regmap *regmap;
 	struct regmap *regmap_cec;
+	struct regmap *regmap_packet;
 	enum drm_connector_status status;
 	bool powered;
 
