@@ -131,7 +131,6 @@ static int hi6220_reset_probe(struct platform_device *pdev)
 		data->rc_dev.ops = &hi6220_peripheral_reset_ops;
 		data->rc_dev.nr_resets = PERIPH_MAX_INDEX;
 	}
-
 	return reset_controller_register(&data->rc_dev);
 }
 
