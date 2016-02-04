@@ -38,3 +38,11 @@ config ION_HISI
 	depends on ARCH_HISI && ION
 	help
 	 Choose this option if you wish to use ion on an Hisilicon platform
+
+config ION_POOL_CACHE_POLICY
+	bool "Ion set page pool cache policy"
+	depends on ION && X86
+	default y if X86
+	help
+	  Choose this option if need to explicity set cache policy of the
+	  pages in the page pool.
