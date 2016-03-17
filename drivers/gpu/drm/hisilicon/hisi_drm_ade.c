@@ -204,6 +204,9 @@ static void ade_ldi_set_mode(struct ade_crtc *acrtc,
 		DRM_ERROR("set ade_pixel_clk_rate fail\n");
 	adj_mode->clock = clk_get_rate(ctx->ade_pix_clk) / 1000;
 
+
+	printk("JDB: set mode: %ld  adj mode: %ld\n", mode->clock, adj_mode->clock);
+
 	/* ctran6 setting */
 	writel(1, base + ADE_CTRAN_DIS(ADE_CTRAN6));
 	writel(out_w * out_h - 1, base + ADE_CTRAN_IMAGE_SIZE(ADE_CTRAN6));

@@ -131,6 +131,7 @@ static void set_dsi_phy_rate_equal_or_faster(u32 phy_freq_kHz,
 	u64 temp;
 	u64 tmp_kHz = phy_freq_kHz;
 
+	printk("JDB: set_dsi_phy_rate_equal_or_faster %ld\n", phy_freq_kHz);
 	do {
 		f_kHz = tmp_kHz;
 
@@ -446,12 +447,14 @@ static void dsi_set_mode_timing(void __iomem *base,
 	hline_time  = (((u64)htot * (u64)phy->lane_byte_clk_kHz)) /
 		      pixel_clk_kHz;
 
-	if ((R(hline_time) / 1000) > htot) {
+	printk("JDB: htline_time %ld R(hline_time)/1000 %ld  htot %ld\n", hline_time, R(hline_time)/1000, htot);
+
+	while ((R(hline_time) / 1000) > htot) {
 		DRM_INFO("--: hline_time=%d\n", hline_time);
 		hline_time--;
 	}
 
-	if ((R(hline_time) / 1000) < htot) {
+	while ((R(hline_time) / 1000) < htot) {
 		DRM_INFO("++: hline_time=%d\n", hline_time);
 		hline_time++;
 	}
