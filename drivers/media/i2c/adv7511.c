@@ -34,7 +34,7 @@
 #include <media/v4l2-dv-timings.h>
 #include <media/adv7511.h>
 
-static int debug;
+static int debug = 2;
 module_param(debug, int, 0644);
 MODULE_PARM_DESC(debug, "debug level (0-2)");
 

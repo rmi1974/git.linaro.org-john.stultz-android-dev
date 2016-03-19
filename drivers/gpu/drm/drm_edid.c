@@ -1205,6 +1205,9 @@ drm_do_probe_ddc_edid(void *data, u8 *buf, unsigned int block, size_t len)
 	unsigned char xfers = segment ? 3 : 2;
 	int ret, retries = 5;
 
+
+	printk("JDB: drm_do_probe_ddc_edid!\n");
+
 	/*
 	 * The core I2C driver will automatically retry the transfer if the
 	 * adapter reports EAGAIN. However, we find that bit-banging transfers
@@ -1272,6 +1275,10 @@ struct edid *drm_do_get_edid(struct drm_connector *connector,
 	int i, j = 0, valid_extensions = 0;
 	u8 *block, *new;
 	bool print_bad_edid = !connector->bad_edid_counter || (drm_debug & DRM_UT_KMS);
+
+
+	printk("JDB: drm_do_get_edid !\n");
+
 
 	if ((block = kmalloc(EDID_LENGTH, GFP_KERNEL)) == NULL)
 		return NULL;
@@ -1880,6 +1887,10 @@ static struct drm_display_mode *drm_mode_detailed(struct drm_device *dev,
 	unsigned vsync_offset = (pt->hsync_vsync_offset_pulse_width_hi & 0xc) << 2 | pt->vsync_offset_pulse_width_lo >> 4;
 	unsigned vsync_pulse_width = (pt->hsync_vsync_offset_pulse_width_hi & 0x3) << 4 | (pt->vsync_offset_pulse_width_lo & 0xf);
 
+
+	printk("JDB: drm_mode_detailed!\n");
+
+
 	/* ignore tiny modes */
 	if (hactive < 64 || vactive < 64)
 		return NULL;
@@ -1925,6 +1936,9 @@ static struct drm_display_mode *drm_mode_detailed(struct drm_device *dev,
 	mode->vsync_start = mode->vdisplay + vsync_offset;
 	mode->vsync_end = mode->vsync_start + vsync_pulse_width;
 	mode->vtotal = mode->vdisplay + vblank;
+
+
+	printk("JDB drm_mode_detailed: %ldx%ld clock:%ld\n", (long)mode->htotal, (long)mode->vtotal, (long)mode->clock);
 
 	/* Some EDIDs have bogus h/vtotal values */
 	if (mode->hsync_end > mode->htotal)
