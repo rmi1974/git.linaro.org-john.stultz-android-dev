@@ -215,6 +215,8 @@ static int mali_regulator_enable(void)
 	if (stat)
 		return stat;
 
+/* XXX HACK - disable tinkering with regulators here as it breaks suspend */
+#if 0
 	for (i = 0; i < 50; i++) {
 		unsigned int res = mali_reg_readl(
 			mali_soc_addr_table->soc_ao_sctrl_base_addr,
@@ -228,6 +230,7 @@ static int mali_regulator_enable(void)
 		pr_err("regulator enable timeout\n");
 		return -ETIMEDOUT;
 	}
+#endif
 
 	return 0;
 }
@@ -258,6 +261,8 @@ static int mali_platform_powerup(void)
 
 static int mali_regulator_disable(void)
 {
+/* XXX HACK - disable tinkering with regulators here as it breaks suspend */
+#if 0
 	mali_reg_writel(mali_soc_addr_table->soc_media_sctrl_base_addr,
 			SOC_MEDIA_SCTRL_SC_MEDIA_RSTEN_ADDR(0), 0, 0, 1);
 	mali_reg_writel(mali_soc_addr_table->soc_media_sctrl_base_addr,
@@ -268,6 +273,7 @@ static int mali_regulator_disable(void)
 			SOC_AO_SCTRL_SC_PW_ISOEN0_ADDR(0), 1, 1, 1);
 	mali_reg_writel(mali_soc_addr_table->soc_ao_sctrl_base_addr,
 			SOC_AO_SCTRL_SC_PW_RSTEN0_ADDR(0), 1, 1, 1);
+#endif
 
 	return regulator_disable(mali_regulator);
 }
