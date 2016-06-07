@@ -431,8 +431,7 @@ static void atmel_hlcdc_fb_output_poll_changed(struct drm_device *dev)
 {
 	struct atmel_hlcdc_dc *dc = dev->dev_private;
 
-	if (dc->fbdev)
-		drm_fbdev_cma_hotplug_event(dc->fbdev);
+	drm_fbdev_cma_hotplug_event(dc->fbdev);
 }
 
 struct atmel_hlcdc_dc_commit {
@@ -646,15 +645,24 @@ static int atmel_hlcdc_dc_load(struct drm_device *dev)
 
 	platform_set_drvdata(pdev, dev);
 
+	drm_kms_helper_poll_init(dev);
+
 	dc->fbdev = drm_fbdev_cma_init(dev, 24,
 			dev->mode_config.num_connector);
-	if (IS_ERR(dc->fbdev))
-		dc->fbdev = NULL;
-
-	drm_kms_helper_poll_init(dev);
+	if (IS_ERR(dc->fbdev)) {
+		dev_err(dev->dev, "failed to setup fbdev\n");
+		ret = PTR_ERR(dc->fbdev);
+		goto err_cleanup_poll;
+	}
 
 	return 0;
 
+err_cleanup_poll:
+	drm_kms_helper_poll_fini(dev);
+
+	pm_runtime_get_sync(dev->dev);
+	drm_irq_uninstall(dev);
+	pm_runtime_put_sync(dev->dev);
 err_periph_clk_disable:
 	pm_runtime_disable(dev->dev);
 	clk_disable_unprepare(dc->hlcdc->periph_clk);
