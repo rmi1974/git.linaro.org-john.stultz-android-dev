@@ -499,6 +499,9 @@ int drm_fb_helper_restore_fbdev_mode_unlocked(struct drm_fb_helper *fb_helper)
 	if (!drm_fbdev_emulation)
 		return -ENODEV;
 
+	if (fb_helper->deferred_setup)
+		return 0;
+
 	mutex_lock(&fb_helper->lock);
 	drm_modeset_lock_all(dev);
 
@@ -1520,6 +1523,23 @@ unlock:
 }
 EXPORT_SYMBOL(drm_fb_helper_pan_display);
 
+static bool drm_fb_helper_maybe_connected(struct drm_fb_helper *helper)
+{
+	bool connected = false;
+	unsigned int i;
+
+	for (i = 0; i < helper->connector_count; i++) {
+		struct drm_fb_helper_connector *fb = helper->connector_info[i];
+
+		if (fb->connector->status != connector_status_disconnected) {
+			connected = true;
+			break;
+		}
+	}
+
+	return connected;
+}
+
 /*
  * Allocates the backing storage and sets up the fbdev info structure through
  * the ->fb_probe callback and then registers the fbdev and sets up the panic
@@ -1620,6 +1640,17 @@ static int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper,
 			sizes.fb_height = min_t(u32, desired_mode->vdisplay + y, sizes.fb_height);
 	}
 
+	/*
+	 * If everything's disconnected, there's no use in attempting to set
+	 * up fbdev.
+	 */
+	if (!drm_fb_helper_maybe_connected(fb_helper)) {
+		DRM_INFO("No outputs connected, deferring setup\n");
+		fb_helper->preferred_bpp = preferred_bpp;
+		fb_helper->deferred_setup = true;
+		return 0;
+	}
+
 	if (crtc_count == 0 || sizes.fb_width == -1 || sizes.fb_height == -1) {
 		/*
 		 * Hmm everyone went away - assume VGA cable just fell out
@@ -1646,6 +1677,7 @@ static int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper,
 		if (fb_helper->crtc_info[i].mode_set.num_connectors)
 			fb_helper->crtc_info[i].mode_set.fb = fb_helper->fb;
 
+	fb_helper->deferred_setup = false;
 	return 0;
 }
 
@@ -2360,6 +2392,10 @@ int drm_fb_helper_hotplug_event(struct drm_fb_helper *fb_helper)
 
 	if (!drm_fbdev_emulation)
 		return 0;
+
+	if (fb_helper->deferred_setup)
+		return drm_fb_helper_initial_config(fb_helper,
+						    fb_helper->preferred_bpp);
 
 	mutex_lock(&fb_helper->lock);
 	mutex_lock(&dev->mode_config.mutex);
