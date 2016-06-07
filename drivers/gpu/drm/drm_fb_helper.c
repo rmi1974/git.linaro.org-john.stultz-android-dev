@@ -102,8 +102,8 @@ static DEFINE_MUTEX(kernel_fb_helper_lock);
 	for (({ lockdep_assert_held(&(fbh)->dev->mode_config.mutex); }), \
 	     i__ = 0; i__ < (fbh)->connector_count; i__++)
 
-int drm_fb_helper_add_one_connector(struct drm_fb_helper *fb_helper,
-				    struct drm_connector *connector)
+static int __drm_fb_helper_add_one_connector(struct drm_fb_helper *fb_helper,
+					     struct drm_connector *connector)
 {
 	struct drm_fb_helper_connector **temp;
 	struct drm_fb_helper_connector *conn;
@@ -136,6 +136,20 @@ int drm_fb_helper_add_one_connector(struct drm_fb_helper *fb_helper,
 	fb_helper->connector_info[fb_helper->connector_count++] = conn;
 	return 0;
 }
+
+int drm_fb_helper_add_one_connector(struct drm_fb_helper *fb_helper,
+				    struct drm_connector *connector)
+{
+	int err;
+
+	mutex_lock(&fb_helper->dev->mode_config.mutex);
+
+	err = __drm_fb_helper_add_one_connector(fb_helper, connector);
+
+	mutex_unlock(&fb_helper->dev->mode_config.mutex);
+
+	return err;
+}
 EXPORT_SYMBOL(drm_fb_helper_add_one_connector);
 
 /**
@@ -164,26 +178,19 @@ int drm_fb_helper_single_add_all_connectors(struct drm_fb_helper *fb_helper)
 
 	mutex_lock(&dev->mode_config.mutex);
 	drm_connector_list_iter_get(dev, &conn_iter);
+
 	drm_for_each_connector_iter(connector, &conn_iter) {
-		ret = drm_fb_helper_add_one_connector(fb_helper, connector);
-
-		if (ret)
-			goto fail;
+		ret = __drm_fb_helper_add_one_connector(fb_helper, connector);
+		if (ret) {
+			for (i = 0; i < fb_helper->connector_count; i++) {
+				kfree(fb_helper->connector_info[i]);
+				fb_helper->connector_info[i] = NULL;
+			}
+			fb_helper->connector_count = 0;
+			break;
+		}
 	}
-	goto out;
 
-fail:
-	drm_fb_helper_for_each_connector(fb_helper, i) {
-		struct drm_fb_helper_connector *fb_helper_connector =
-			fb_helper->connector_info[i];
-
-		drm_connector_unreference(fb_helper_connector->connector);
-
-		kfree(fb_helper_connector);
-		fb_helper->connector_info[i] = NULL;
-	}
-	fb_helper->connector_count = 0;
-out:
 	drm_connector_list_iter_put(&conn_iter);
 	mutex_unlock(&dev->mode_config.mutex);
 
@@ -191,7 +198,7 @@ out:
 }
 EXPORT_SYMBOL(drm_fb_helper_single_add_all_connectors);
 
-int drm_fb_helper_remove_one_connector(struct drm_fb_helper *fb_helper,
+static int __drm_fb_helper_remove_one_connector(struct drm_fb_helper *fb_helper,
 				       struct drm_connector *connector)
 {
 	struct drm_fb_helper_connector *fb_helper_connector;
@@ -209,6 +216,7 @@ int drm_fb_helper_remove_one_connector(struct drm_fb_helper *fb_helper,
 
 	if (i == fb_helper->connector_count)
 		return -EINVAL;
+
 	fb_helper_connector = fb_helper->connector_info[i];
 	drm_connector_unreference(fb_helper_connector->connector);
 
@@ -219,6 +227,20 @@ int drm_fb_helper_remove_one_connector(struct drm_fb_helper *fb_helper,
 	kfree(fb_helper_connector);
 
 	return 0;
+}
+
+int drm_fb_helper_remove_one_connector(struct drm_fb_helper *fb_helper,
+				       struct drm_connector *connector)
+{
+	int err;
+
+	mutex_lock(&fb_helper->dev->mode_config.mutex);
+
+	err = __drm_fb_helper_remove_one_connector(fb_helper, connector);
+
+	mutex_unlock(&fb_helper->dev->mode_config.mutex);
+
+	return err;
 }
 EXPORT_SYMBOL(drm_fb_helper_remove_one_connector);
 
