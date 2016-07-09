@@ -118,6 +118,14 @@ void drm_mode_probed_add(struct drm_connector *connector,
 {
 	WARN_ON(!mutex_is_locked(&connector->dev->mode_config.mutex));
 
+	printk("JDB drm_mode_probed_add Modeline %d:\"%s\" %d %d %d %d %d %d %d %d %d %d "
+			"0x%x 0x%x\n",
+		mode->base.id, mode->name, mode->vrefresh, mode->clock,
+		mode->hdisplay, mode->hsync_start,
+		mode->hsync_end, mode->htotal,
+		mode->vdisplay, mode->vsync_start,
+		mode->vsync_end, mode->vtotal, mode->type, mode->flags);
+
 	list_add_tail(&mode->head, &connector->probed_modes);
 }
 EXPORT_SYMBOL(drm_mode_probed_add);

@@ -2747,6 +2747,7 @@ do_cea_modes(struct drm_connector *connector, const u8 *db, u8 len)
 		struct drm_display_mode *mode;
 		mode = drm_display_mode_from_vic_index(connector, db, len, i);
 		if (mode) {
+			printk("JDB: Adding cea mode from vic_index\n");
 			drm_mode_probed_add(connector, mode);
 			modes++;
 		}
@@ -2834,6 +2835,7 @@ static int add_hdmi_mode(struct drm_connector *connector, u8 vic)
 	if (!newmode)
 		return 0;
 
+	printk("JDB: Adding mode via add_hdmi_mode\n");
 	drm_mode_probed_add(connector, newmode);
 
 	return 1;
@@ -3009,6 +3011,7 @@ do_hdmi_vsdb_modes(struct drm_connector *connector, const u8 *db, u8 len,
 
 			if (newmode) {
 				newmode->flags |= newflag;
+				printk("JDB: Adding new mode from vic!\n");
 				drm_mode_probed_add(connector, newmode);
 				modes++;
 			}
@@ -3806,12 +3809,19 @@ int drm_add_edid_modes(struct drm_connector *connector, struct edid *edid)
 	 *
 	 * XXX order for additional mode types in extension blocks?
 	 */
+printk("JDB: Calling add_detailed_modes!\n");
 	num_modes += add_detailed_modes(connector, edid, quirks);
+printk("JDB: Calling add_cvt_modes!\n");
 	num_modes += add_cvt_modes(connector, edid);
+printk("JDB: Calling add_standard_modes!\n");
 	num_modes += add_standard_modes(connector, edid);
+printk("JDB: Calling add_established_modes!\n");
 	num_modes += add_established_modes(connector, edid);
+printk("JDB: Calling add_cea_modes!\n");
 	num_modes += add_cea_modes(connector, edid);
+printk("JDB: Calling add_alternate_cea_modes!\n");
 	num_modes += add_alternate_cea_modes(connector, edid);
+printk("JDB: Calling add_inferred_modes!\n");
 	if (edid->features & DRM_EDID_FEATURE_DEFAULT_GTF)
 		num_modes += add_inferred_modes(connector, edid);
 
