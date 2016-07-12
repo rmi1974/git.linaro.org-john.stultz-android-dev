@@ -104,6 +104,28 @@ void adv7533_dsi_power_on(struct adv7511 *adv)
 	/* disable test mode */
 	regmap_write(adv->regmap_cec, 0x55, 0x00);
 
+	/* hide Audio infoframe updates */
+	regmap_update_bits(adv->regmap, ADV7511_REG_INFOFRAME_UPDATE,
+				BIT(5), BIT(5));
+	/* enable N/CTS, enable Audio sample packets */
+	regmap_update_bits(adv->regmap, ADV7511_REG_PACKET_ENABLE1,
+				BIT(5), BIT(5));
+	/* enable N/CTS */
+	regmap_update_bits(adv->regmap, ADV7511_REG_PACKET_ENABLE1,
+				BIT(6), BIT(6));
+	/* not copyrighted */
+	regmap_update_bits(adv->regmap, ADV7511_REG_AUDIO_CFG1,
+				BIT(5), BIT(5));
+	/* enable audio infoframes */
+	regmap_update_bits(adv->regmap, ADV7511_REG_PACKET_ENABLE1,
+				BIT(3), BIT(3));
+	/* AV mute disable */
+	regmap_update_bits(adv->regmap, ADV7511_REG_GC(0),
+				BIT(7) | BIT(6), BIT(7));
+	/* use Audio infoframe updated info */
+	regmap_update_bits(adv->regmap, ADV7511_REG_GC(1),
+				BIT(5), 0);
+
 	regmap_register_patch(adv->regmap_cec, adv7533_cec_fixed_registers,
 			      ARRAY_SIZE(adv7533_cec_fixed_registers));
 }
