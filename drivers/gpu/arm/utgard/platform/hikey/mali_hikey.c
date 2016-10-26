@@ -22,8 +22,6 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/platform_device.h>
-#include <linux/regulator/consumer.h>
-#include <linux/regulator/driver.h>
 #include <linux/pm.h>
 #include <linux/mm.h>
 #include <linux/of.h>
@@ -76,7 +74,6 @@ struct mali_soc_remap_addr_table {
 
 static struct clk *mali_clk_g3d;
 static struct clk *mali_pclk_g3d;
-static struct regulator *mali_regulator;
 static struct device_node *mali_np;
 static bool mali_gpu_power_status;
 
@@ -162,6 +159,7 @@ static int mali_clock_on(void)
 static void mali_clock_off(void)
 {
 	clk_disable_unprepare(mali_clk_g3d);
+	clk_disable_unprepare(mali_pclk_g3d);
 }
 
 static int mali_domain_powerup_finish(void)
@@ -207,41 +205,12 @@ static int mali_domain_powerup_finish(void)
 	return 0;
 }
 
-static int mali_regulator_enable(void)
-{
-	int i, stat;
-
-	stat = regulator_enable(mali_regulator);
-	if (stat)
-		return stat;
-
-	for (i = 0; i < 50; i++) {
-		unsigned int res = mali_reg_readl(
-			mali_soc_addr_table->soc_ao_sctrl_base_addr,
-			SOC_AO_SCTRL_SC_PW_MTCMOS_STAT0_ADDR(0), 1, 1);
-		if (res)
-			break;
-		udelay(1);
-	}
-
-	if (50 == i) {
-		pr_err("regulator enable timeout\n");
-		return -ETIMEDOUT;
-	}
-
-	return 0;
-}
-
 static int mali_platform_powerup(void)
 {
 	int stat;
 
 	if (mali_gpu_power_status)
 		return 0;
-
-	stat = mali_regulator_enable();
-	if (stat)
-		return stat;
 
 	stat = mali_clock_on();
 	if (stat)
@@ -260,8 +229,6 @@ static int mali_regulator_disable(void)
 {
 	mali_reg_writel(mali_soc_addr_table->soc_media_sctrl_base_addr,
 			SOC_MEDIA_SCTRL_SC_MEDIA_RSTEN_ADDR(0), 0, 0, 1);
-	mali_reg_writel(mali_soc_addr_table->soc_media_sctrl_base_addr,
-			SOC_MEDIA_SCTRL_SC_MEDIA_CLKDIS_ADDR(0), 1, 1, 1);
 	mali_reg_writel(mali_soc_addr_table->soc_ao_sctrl_base_addr,
 			SOC_AO_SCTRL_SC_PW_CLKDIS0_ADDR(0), 1, 1, 1);
 	mali_reg_writel(mali_soc_addr_table->soc_ao_sctrl_base_addr,
@@ -269,7 +236,7 @@ static int mali_regulator_disable(void)
 	mali_reg_writel(mali_soc_addr_table->soc_ao_sctrl_base_addr,
 			SOC_AO_SCTRL_SC_PW_RSTEN0_ADDR(0), 1, 1, 1);
 
-	return regulator_disable(mali_regulator);
+	return 0;
 }
 
 static int mali_platform_powerdown(void)
@@ -434,24 +401,11 @@ static int init_mali_clock_regulator(struct platform_device *pdev)
 {
 	int stat, ret;
 
-	BUG_ON(mali_regulator || mali_clk_g3d || mali_pclk_g3d);
-
-	/* regulator init */
-
-	mali_regulator  = regulator_get(&pdev->dev, "G3D_PD_VDD");
-	if (IS_ERR(mali_regulator)) {
-		pr_err("failed to get G3D_PD_VDD\n");
-		return -ENODEV;
-	}
-
-	stat = mali_regulator_enable();
-	if (stat)
-		return stat;
+	BUG_ON(mali_clk_g3d || mali_pclk_g3d);
 
 	mali_gpu_power_status = true;
 
 	/* clk init */
-
 	mali_clk_g3d = clk_get(&pdev->dev, "clk_g3d");
 	if (IS_ERR(mali_clk_g3d)) {
 		pr_err("failed to get source CLK_G3D\n");
@@ -500,7 +454,7 @@ static int deinit_mali_clock_regulator(void)
 {
 	int stat;
 
-	BUG_ON(!mali_regulator || !mali_clk_g3d || !mali_pclk_g3d);
+	BUG_ON(!mali_clk_g3d || !mali_pclk_g3d);
 
 	stat = mali_platform_powerdown();
 	if (stat)
@@ -510,8 +464,6 @@ static int deinit_mali_clock_regulator(void)
 	mali_clk_g3d = NULL;
 	clk_put(mali_pclk_g3d);
 	mali_pclk_g3d = NULL;
-	regulator_put(mali_regulator);
-	mali_regulator = NULL;
 
 	return 0;
 }
@@ -622,6 +574,7 @@ static void mali_unmap_soc_addr(void)
 int mali_platform_device_init(struct platform_device *pdev)
 {
 	int stat;
+	int irq, i;
 
 #if HISI6220_USE_ION
 	stat = mali_ion_mem_init();
@@ -637,9 +590,6 @@ int mali_platform_device_init(struct platform_device *pdev)
 	pdev->dev.type = &mali_gpu_device_device_type;
 	pdev->dev.platform_data = &mali_gpu_data;
 	pdev->dev.dma_mask = &pdev->dev.coherent_dma_mask;
-#if defined(CONFIG_ARM64)
-	pdev->dev.archdata.dma_ops = &noncoherent_swiotlb_dma_ops;
-#endif
 	mali_np = pdev->dev.of_node;
 
 	if (mali_get_gpu_type() != MALI_CORE_450_MP4) {
@@ -647,6 +597,17 @@ int mali_platform_device_init(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	/*
+	 * We need to use DT to get the irq domain, so rewrite the static
+	 * table with the irq given from platform_get_irq().
+	 */
+	irq = platform_get_irq(pdev, 0);
+	for (i = 0; i < ARRAY_SIZE(mali_gpu_resources_m450_mp4); i++) {
+		if (IORESOURCE_IRQ & mali_gpu_resources_m450_mp4[i].flags) {
+			mali_gpu_resources_m450_mp4[i].start = irq;
+			mali_gpu_resources_m450_mp4[i].end = irq;
+		}
+	}
 	pdev->num_resources = ARRAY_SIZE(mali_gpu_resources_m450_mp4);
 	pdev->resource = mali_gpu_resources_m450_mp4;
 
