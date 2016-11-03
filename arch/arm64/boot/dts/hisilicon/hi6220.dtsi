@@ -268,6 +268,18 @@
 			#reset-cells = <1>;
 		};
 
+		sys_ctrl_rst: sys_rst_controller {
+			compatible = "hisilicon,hi6220-reset-sysctrl";
+			#reset-cells = <1>;
+			hisi,rst-syscon = <&sys_ctrl>;
+		};
+
+		media_ctrl_rst: media_rst_controller {
+			compatible = "hisilicon,hi6220-reset-mediactrl";
+			#reset-cells = <1>;
+			hisi,rst-syscon = <&media_ctrl>;
+		};
+
 		pm_ctrl: pm_ctrl@f7032000 {
 			compatible = "hisilicon,hi6220-pmctrl", "syscon";
 			reg = <0x0 0xf7032000 0x0 0x1000>;
