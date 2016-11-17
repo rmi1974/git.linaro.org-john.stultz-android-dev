@@ -3,3 +3,16 @@ config SND_I2S_HI6210_I2S
 	select SND_SOC_GENERIC_DMAENGINE_PCM
 	help
 	  Hisilicon I2S
+
+config SND_SOC_PCM_HI6210
+        tristate "SoC Audio support for HI6210"
+        help
+                Enable this option for HI6210 APB audio support.
+
+config SND_HI6210_HISSC
+        tristate "Hi6210-Hissc sound support"
+        help
+                This option enables sound support for Hi6210-Hissc.
+                ssc mean Soc-Smartstar Codec.
+config SND_SOC_CODEC_HISSC
+        tristate "HI Soc Smartstar Codec support"
