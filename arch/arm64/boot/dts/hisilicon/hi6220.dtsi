@@ -874,10 +874,10 @@
 		//		avdd1v8-supply = <&ldo15>;
 		//		schg_boost3-supply = <&schg_boost3>;/* classd supply */
 		//		gpio_headset_intr_line = <&gpio_pmu_irq_n_sft>;/*GPIO_4_6*/
-				reg = <0xF7118000 0x1000         /* soc codec*/
-					0xF8000000 0x1000     /* pmussi   */
-					0xFD832000 0x1000         /* hkadc    */
-					0xF7030000 0x1000>;   /* psctrl  */
+				reg = <0x0 0xf7118000 0x0 0x1000>;         /* soc codec*/
+//					<0x0 0xf8000000 0x0 0x1000>,    /* pmussi   */
+//					<0x0 0xfd832000 0x0 0x1000>,         /* hkadc    */
+//					<0x0 0xf7030000 0x0 0x1000>;   /* psctrl  */
 				status = "ok";
 			};  
 

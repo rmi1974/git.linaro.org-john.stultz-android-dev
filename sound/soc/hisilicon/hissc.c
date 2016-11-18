@@ -48,17 +48,17 @@
 /*KEY_MEDIA defined in linux/input.h*/
 #include <linux/input/matrix_keypad.h>
 #include <linux/irq.h>
-//#include <sound/hissc_common.h>
+#include "hissc_common.h"
 #include <linux/interrupt.h>
 #include <linux/irqnr.h>
 //#include <linux/mux.h>
 //#include <mach/pmussi_drv.h>
 //#include <linux/hisi/reg_ops.h>
 //#include <linux/hisi/drv_pmic_if.h>
-//#include <soc_peri_sctrl_interface.h>
+#include "soc_peri_sctrl_interface.h"
 //#include <soc_smart_interface.h>
 #define LOG_TAG "hissc"
-//#include <acodec_interface.h>
+#include "acodec_interface.h"
 #include "hissc.h"
 /*#include "mdrv.h"*/
 //#include <../../../drivers/hwmon/hi6xxx_hkadc_value.h>
@@ -124,7 +124,7 @@ enum delay_time {
 struct hissc_jack_data {
 	struct snd_soc_jack *jack;
 	int report;
-	struct switch_dev sdev;
+//js	struct switch_dev sdev;
 };
 
 struct hissc_headset_voltage {/*mV*/
@@ -185,7 +185,7 @@ struct hissc_priv {
 	int  hissc_pmu_status;
 	int pressed_btn_type;
 	unsigned short adc_voltage;
-	struct wake_lock wake_lock;
+//js	struct wake_lock wake_lock;
 	struct clk *codec_clk;
 	/* work queue for headset */
 	struct workqueue_struct *hs_pi_dwq; /* headset plugin delayed work queue */
@@ -287,7 +287,7 @@ static inline void hissc_irqs_mask_set(unsigned int irqs);
 static inline void hissc_irqs_clr(unsigned int irqs);
 static inline void hissc_irqs_mask_clr(unsigned int irqs);
 
-extern int BSP_IPC_IntSend(IPC_INT_CORE_E enDstCore, IPC_INT_LEV_E ulLvl);
+//js extern int BSP_IPC_IntSend(IPC_INT_CORE_E enDstCore, IPC_INT_LEV_E ulLvl);
 
 /*****************************************************************************
 *
@@ -424,17 +424,25 @@ static unsigned int __hissc_reg_read(struct hissc_priv *priv, unsigned int reg)
 		ret = readl(g_hissc_socodec_base_addr + reg_value);
 	} else if (PAGE_SmartStarCODEC == reg_type) {
 		/* SMARTSTAR part */
-		ret = readl(g_hissc_reg_base_addr + (reg_value << 2));
+//js		ret = readl(g_hissc_reg_base_addr + (reg_value << 2));
+		loge("reg=0x%x\n", reg);
+		ret = INVALID_REG_VALUE;
 	} else if (PAGE_SmartStarHKADC == reg_type) {
 		/* SMARTSTAR HKADC */
-		//ret = readl(g_hissc_hkadc_reg_base_addr + (reg_value << 2));
+//js		ret = readl(g_hissc_hkadc_reg_base_addr + (reg_value << 2));
+		loge("reg=0x%x\n", reg);
+		ret = INVALID_REG_VALUE;
 	} else if (PAGE_PeriSCTRL == reg_type) {
 		/* Peri SCTRL */
 		//ret = phy_reg_readl(SOC_PERI_SCTRL_BASE_ADDR, reg_value, 0, 31);
-		ret = readl(g_hissc_psctrl_base_addr+reg_value);
+//JS		ret = readl(g_hissc_psctrl_base_addr+reg_value);
+		loge("reg=0x%x\n", reg);
+		ret = INVALID_REG_VALUE;
 	} else if (PAGE_PMCTRL == reg_type) {
 		/* PMCTRL */
-		ret = hi6xxx_pmic_reg_read(reg_value);
+//js		ret = hi6xxx_pmic_reg_read(reg_value);
+		loge("reg=0x%x\n", reg);
+		ret = INVALID_REG_VALUE;
 	} else if (PAGE_VIRCODEC == reg_type) {
 		/* PMCTRL */
 		ret = priv->v_codec_reg[reg_value];
@@ -482,17 +490,17 @@ static void __hissc_reg_write(struct hissc_priv *priv, unsigned int reg, unsigne
 		writel(value, g_hissc_socodec_base_addr + reg_value);
 	} else if (PAGE_SmartStarCODEC == reg_type) {
 		/* SMARTSTAR part */
-		writel(value, g_hissc_reg_base_addr + (reg_value << 2));
+//js		writel(value, g_hissc_reg_base_addr + (reg_value << 2));
 	} else if (PAGE_SmartStarHKADC == reg_type) {
 		/* SMARTSTAR HKADC */
-		// writel(value, g_hissc_hkadc_reg_base_addr + (reg_value << 2));
+//js		writel(value, g_hissc_hkadc_reg_base_addr + (reg_value << 2));
 	} else if (PAGE_PeriSCTRL == reg_type) {
 		/* Peri SCTRL */
 		//phy_reg_writel(SOC_PERI_SCTRL_BASE_ADDR, reg_value, 0, 31, value);
-		writel(value,g_hissc_psctrl_base_addr+reg_value);
+//JS		writel(value,g_hissc_psctrl_base_addr+reg_value);
 	} else if (PAGE_PMCTRL == reg_type) {
 		/* PMCTRL */
-		hi6xxx_pmic_reg_write(reg_value, value);
+//js		hi6xxx_pmic_reg_write(reg_value, value);
 	} else if (PAGE_VIRCODEC == reg_type) {
 		/* PMCTRL */
 		priv->v_codec_reg[reg_value] = value;
@@ -1750,6 +1758,7 @@ static int hissc_pll_supply_power_mode_event(struct snd_soc_dapm_widget *w,
 	int ret = 0;
 	struct hissc_priv *priv = snd_soc_codec_get_drvdata(g_codec);
 
+#if JSDISABLE
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		ret = clk_prepare_enable(priv->codec_soc);
@@ -1757,18 +1766,18 @@ static int hissc_pll_supply_power_mode_event(struct snd_soc_dapm_widget *w,
 			loge("codec 49.15M clken fail\n");
 		}
 		logi("[AUDIO] inform lpm3 to remote sleep. \n");
-		BSP_IPC_IntSend(IPC_CORE_MCU, (IPC_INT_LEV_E)IPC_MCU_INT_SRC_ACPU_I2S_REMOTE_SLEEP);
+//js		BSP_IPC_IntSend(IPC_CORE_MCU, (IPC_INT_LEV_E)IPC_MCU_INT_SRC_ACPU_I2S_REMOTE_SLEEP);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		logi("[AUDIO] inform lpm3 to remote invalid. \n");
-		BSP_IPC_IntSend(IPC_CORE_MCU, (IPC_INT_LEV_E)IPC_MCU_INT_SRC_ACPU_I2S_REMOTE_INVALID);
+//js		BSP_IPC_IntSend(IPC_CORE_MCU, (IPC_INT_LEV_E)IPC_MCU_INT_SRC_ACPU_I2S_REMOTE_INVALID);
 		clk_disable_unprepare(priv->codec_soc);
 		break;
 	default :
 		loge("power mode event err : %d\n", event);
 		break;
 	}
-
+#endif
 	return 0;
 }
 
@@ -1777,7 +1786,7 @@ static int hissc_backuppll_supply_power_mode_event(struct snd_soc_dapm_widget *w
 {
 	int ret = 0;
 	struct hissc_priv *priv = snd_soc_codec_get_drvdata(g_codec);
-
+#if JSDISABLE
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		ret = clk_prepare_enable(priv->codec_soc);
@@ -1801,7 +1810,7 @@ static int hissc_backuppll_supply_power_mode_event(struct snd_soc_dapm_widget *w
 		loge("power mode event err : %d\n", event);
 		break;
 	}
-
+#endif
 	return 0;
 }
 
@@ -3675,7 +3684,7 @@ static void hissc_hs_micbias_enable(struct snd_soc_codec *codec, bool enable)
 			hissc_hs_micbias_pd(codec, true);
 	} else {
 		if ((0 == priv->hs_micbias_work) && !priv->hs_micbias_hkadc) {
-			wake_lock_timeout(&priv->wake_lock, msecs_to_jiffies(3500));
+//js			wake_lock_timeout(&priv->wake_lock, msecs_to_jiffies(3500));
 			mod_delayed_work(priv->hs_micbias_hkadc_dwq,
 				&priv->hs_micbias_hkadc_dw,
 				msecs_to_jiffies(3000));
@@ -3844,8 +3853,8 @@ static inline int hissc_hkadc_read(struct snd_soc_codec *codec)
 	struct hissc_priv *priv = snd_soc_codec_get_drvdata(codec);
 	int hkadc_value = 0;
 
-    DRV_HKADC_GET_TEMP(HKADC_TEMP_CODEC,&priv->adc_voltage,
-                       NULL,0);
+//js    DRV_HKADC_GET_TEMP(HKADC_TEMP_CODEC,&priv->adc_voltage,
+//js                       NULL,0);
 
 	/* HKADC voltage,real value should devided 0.6 */
 	hkadc_value = ((priv->adc_voltage)*(10))/(6);
@@ -3884,7 +3893,7 @@ static irqreturn_t hissc_irq_handler(int irq, void *data)
 		return IRQ_NONE;
 	}
 
-	wake_lock_timeout(&priv->wake_lock, msecs_to_jiffies(2000));
+//js	wake_lock_timeout(&priv->wake_lock, msecs_to_jiffies(2000));
 	/* distribute and handle irq individually, one deal one time */
 	if (irq_masked & IRQ_PLUG_OUT){
 		queue_delayed_work(priv->hs_po_dwq,
@@ -4393,7 +4402,7 @@ static void hissc_init_reg_value(struct snd_soc_codec *codec)
 	hissc_reg_write(codec, HISSC_SMT_CODEC_ANA_RW21_ADDR, 0x13);
 
 	// classD PGA CFG
-	hi6xxx_pmic_reg_write(SOC_SMART_CLASSD_CTRL2_ADDR(0), 0x2F);
+//js	hi6xxx_pmic_reg_write(SOC_SMART_CLASSD_CTRL2_ADDR(0), 0x2F);
 
 	// classD normal mute mode, and set mute ---  0x69 [5:4] = 11
 	hissc_set_reg_bits(HISSC_PMU_CODEC_CLASSD_CTRL1_ADDR,
@@ -5193,9 +5202,9 @@ static int hissc_headset_init(struct snd_soc_codec *codec)
 	enum of_gpio_flags flags = 0;
 
 	/* smartstar codec reset */
-	hi6xxx_pmic_reg_write(SOC_SMART_PMU_SOFT_RST_ADDR(0), 0x22 << SOC_SMART_PMU_SOFT_RST_soft_rst_n_START);
+//js	hi6xxx_pmic_reg_write(SOC_SMART_PMU_SOFT_RST_ADDR(0), 0x22 << SOC_SMART_PMU_SOFT_RST_soft_rst_n_START);
 	msleep(10);
-	hi6xxx_pmic_reg_write(SOC_SMART_PMU_SOFT_RST_ADDR(0), 0x2F << SOC_SMART_PMU_SOFT_RST_soft_rst_n_START);
+//js	hi6xxx_pmic_reg_write(SOC_SMART_PMU_SOFT_RST_ADDR(0), 0x2F << SOC_SMART_PMU_SOFT_RST_soft_rst_n_START);
 
 	priv = snd_soc_codec_get_drvdata(codec);
 	if (NULL == priv) {
@@ -5217,14 +5226,14 @@ static int hissc_headset_init(struct snd_soc_codec *codec)
 
 	hissc_init_reg_value(codec);
 
-	g_codec_version = hi6xxx_pmic_get_version();
-	logi("version=0x%x", g_codec_version);
-	if((g_codec_version >= PMU_VER_START) && (g_codec_version <= PMU_VER_END)) {
+//js	g_codec_version = hi6xxx_pmic_get_version();
+//js	logi("version=0x%x", g_codec_version);
+//js	if((g_codec_version >= PMU_VER_START) && (g_codec_version <= PMU_VER_END)) {
 		priv->hissc_pmu_status = STATUS_OK;
-	} else {
-		priv->hissc_pmu_status = STATUS_ERROR;
-		logi("PMU version is wrong");
-	}
+//js	} else {
+//js		priv->hissc_pmu_status = STATUS_ERROR;
+//js		logi("PMU version is wrong");
+//js	}
 
 	/* memory alloc */
 	priv->hs_jack = kzalloc(sizeof(struct hissc_jack_data), GFP_KERNEL);
@@ -5267,6 +5276,7 @@ static int hissc_headset_init(struct snd_soc_codec *codec)
 	/* avoid irq triggered while codec power up */
 	hissc_irqs_clr(IRQ_MSK_HS_ALL);
 
+#ifdef JSOUT
 	/* Headset jack */
 	ret = snd_soc_jack_new(codec, "Headset Jack", SND_JACK_HEADSET, (priv->hs_jack->jack));
 	if (ret) {
@@ -5300,6 +5310,7 @@ static int hissc_headset_init(struct snd_soc_codec *codec)
 		loge("Registering switch device\n");
 		return -EFAULT;
 	}
+#endif
 #endif
 
 #ifdef CONFIG_DEBUG_FS
@@ -5419,6 +5430,7 @@ static int hissc_headset_init(struct snd_soc_codec *codec)
 	}
 	INIT_DELAYED_WORK(&priv->hs_micbias_hkadc_dw, hissc_hs_micbias_hkadc_work_func);
 
+#ifdef JSOUT
 	/* config intr for codec */
 	priv->gpio_intr_pin = of_get_gpio_by_prop(np, "gpio_headset_intr_line",0,0, &flags);
 	if (0 > priv->gpio_intr_pin) {
@@ -5427,7 +5439,6 @@ static int hissc_headset_init(struct snd_soc_codec *codec)
 	}
 	priv->gpio_irq = gpio_to_irq(priv->gpio_intr_pin);
 	logd("gpio_to_irq, gp_irq = %d(%d)", priv->gpio_irq, priv->gpio_intr_pin);
-
 	/* irq shared with pmu */
 	ret = request_irq(priv->gpio_irq, hissc_irq_handler, IRQF_TRIGGER_LOW | IRQF_SHARED | IRQF_NO_SUSPEND, "codec_irq", codec);
 	if (ret) {
@@ -5442,6 +5453,7 @@ static int hissc_headset_init(struct snd_soc_codec *codec)
 	} else {
 		hissc_irqs_mask_clr(IRQ_PLUG_IN);
 	}
+#endif
 
 END:
 	return ret;
@@ -5473,7 +5485,7 @@ static int hissc_set_priv(struct snd_soc_codec *codec)
 	mutex_init(&priv->hs_micbias_mutex);
 	mutex_init(&priv->hkadc_mutex);
 	mutex_init(&priv->plug_mutex);
-	wake_lock_init(&priv->wake_lock, WAKE_LOCK_SUSPEND, "hissc");
+//js	wake_lock_init(&priv->wake_lock, WAKE_LOCK_SUSPEND, "hissc");
 
 	return 0;
 }
@@ -5594,7 +5606,7 @@ static void hissc_free_resource(struct snd_soc_codec *codec)
 	}
 
 	if (NULL != priv) {
-		wake_lock_destroy(&priv->wake_lock);
+//js		wake_lock_destroy(&priv->wake_lock);
 	}
 
 	/* at last free priv */
@@ -5608,7 +5620,7 @@ static void hissc_free_resource(struct snd_soc_codec *codec)
 static int hissc_codec_probe(struct snd_soc_codec *codec)
 {
 	int ret = 0;
-	struct snd_soc_dapm_context *dapm = &codec->dapm;
+	struct snd_soc_dapm_context *dapm = &codec->component.dapm;
 
 	logi("Begin");
 	ret = hissc_set_priv(codec);
@@ -5650,17 +5662,22 @@ static int hissc_codec_remove(struct snd_soc_codec *codec)
 	return 0;
 }
 
+
 static struct snd_soc_codec_driver soc_codec_dev_hissc = {
 	.probe    = hissc_codec_probe,
 	.remove  = hissc_codec_remove,
 	.read      = hissc_reg_read,
 	.write     = hissc_reg_write,
-	.controls = hissc_snd_controls,
-	.num_controls = ARRAY_SIZE(hissc_snd_controls),
-	.dapm_widgets = hissc_dapm_widgets,
-	.num_dapm_widgets = ARRAY_SIZE(hissc_dapm_widgets),
-	.dapm_routes = hissc_route_map,
-	.num_dapm_routes = ARRAY_SIZE(hissc_route_map),
+
+	.component_driver = {
+		.controls = hissc_snd_controls,
+		.num_controls = ARRAY_SIZE(hissc_snd_controls),
+		.dapm_widgets = hissc_dapm_widgets,
+		.num_dapm_widgets = ARRAY_SIZE(hissc_dapm_widgets),
+		.dapm_routes = hissc_route_map,
+		.num_dapm_routes = ARRAY_SIZE(hissc_route_map),
+	}, 
+
 };
 
 static int hissc_probe(struct platform_device *pdev)
@@ -5681,6 +5698,7 @@ static int hissc_probe(struct platform_device *pdev)
 		loge("cannot map register memory\n");
 		return -ENOMEM;
 	}
+#ifdef JSOUT
 
 	/* get pmuspi register base address */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
@@ -5720,6 +5738,7 @@ static int hissc_probe(struct platform_device *pdev)
 		loge("cannot map psctrl memory\n");
 		return -ENOMEM;
 	}
+#endif
 	logi("End");
 
 	return snd_soc_register_codec(&pdev->dev, &soc_codec_dev_hissc, hissc_dai, ARRAY_SIZE(hissc_dai));

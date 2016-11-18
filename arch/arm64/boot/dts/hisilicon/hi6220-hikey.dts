@@ -428,7 +428,7 @@
 		};
 	};
 
-	sound {
+/*	sound {
 		compatible = "simple-audio-card";
 		simple-audio-card,name = "hikey-hdmi";
 		simple-audio-card,format = "i2s";
@@ -444,6 +444,7 @@
 			sound-dai = <&adv7533>;
 		};
 	};
+*/
 };
 
 &uart2 {
