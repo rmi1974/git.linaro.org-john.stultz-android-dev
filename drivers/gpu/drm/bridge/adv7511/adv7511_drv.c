@@ -451,7 +451,7 @@ static int adv7511_irq_process(struct adv7511 *adv7511, bool process_hpd)
 
 	if (irq0 & ADV7511_INT0_EDID_READY || irq1 & ADV7511_INT1_DDC_ERROR) {
 		adv7511->edid_read = true;
-
+		printk("JDB adv7511_irq_process: edid read!\n");
 		if (adv7511->i2c_main->irq)
 			wake_up_all(&adv7511->wq);
 	}
@@ -504,14 +504,22 @@ static int adv7511_get_edid_block(void *data, u8 *buf, unsigned int block,
 	unsigned int i;
 	int ret;
 
-	if (len > 128)
+	printk("JDB: adv7511_get_edid_block: block: %i len: %ld\n", block, (long)len);
+
+	if (len > 128) {
+		printk("JDB: adv7511_get_edid_block wrong len!\n");
 		return -EINVAL;
+	}
 
 	if (adv7511->current_edid_segment != block / 2) {
 		unsigned int status;
 
+		ret = regmap_read(adv7511->regmap, 0xc9, &status);
+		printk("JDB: adv7511_get_edid_block: EDID reread: %i  EDID tries: %i\n", (status & 0x10), (status & 0xf));
+
 		ret = regmap_read(adv7511->regmap, ADV7511_REG_DDC_STATUS,
 				  &status);
+		printk("JDB: adv7511_get_edid_block: status=%i\n", status);
 		if (ret < 0)
 			return ret;
 
@@ -520,6 +528,7 @@ static int adv7511_get_edid_block(void *data, u8 *buf, unsigned int block,
 			regmap_write(adv7511->regmap, ADV7511_REG_EDID_SEGMENT,
 				     block);
 			ret = adv7511_wait_for_edid(adv7511, 200);
+			printk("JDB: waiting for eidi\n");
 			if (ret < 0)
 				return ret;
 		}
@@ -542,10 +551,13 @@ static int adv7511_get_edid_block(void *data, u8 *buf, unsigned int block,
 		for (i = 0; i < 4; ++i) {
 			ret = i2c_transfer(adv7511->i2c_edid->adapter, xfer,
 					   ARRAY_SIZE(xfer));
-			if (ret < 0)
+			if (ret < 0) {
+				printk("JDB: i2c_transfer error! %i\n", ret);
 				return ret;
-			else if (ret != 2)
+			} else if (ret != 2) {
+				printk("JDB: i2c_transfer error %i\n", ret);
 				return -EIO;
+			}
 
 			xfer[1].buf += 64;
 			offset += 64;
@@ -598,7 +610,7 @@ static int adv7511_get_modes(struct adv7511 *adv7511,
 	count = drm_add_edid_modes(connector, edid);
 
 	adv7511_set_config_csc(adv7511, connector, adv7511->rgb);
-
+	printk("JDB: adv7511_get_modes count=%i\n", count);
 	return count;
 }
 
@@ -626,6 +638,7 @@ adv7511_detect(struct adv7511 *adv7511, struct drm_connector *connector)
 	 * at least one transition from disconnected to connected and the chip
 	 * has to be reinitialized. */
 	if (status == connector_status_connected && hpd && adv7511->powered) {
+		printk("JDB: connected, hpd nad powered, power-on and getmodes\n");
 		regcache_mark_dirty(adv7511->regmap);
 		adv7511_power_on(adv7511);
 		adv7511_get_modes(adv7511, connector);
@@ -639,6 +652,8 @@ adv7511_detect(struct adv7511 *adv7511, struct drm_connector *connector)
 	}
 
 	adv7511->status = status;
+	printk("JDB: adv7511_detect: %s\n", (status == connector_status_connected) ? "connected": "disconnected");
+//	dump_stack();
 	return status;
 }
 
@@ -1087,6 +1102,7 @@ static int adv7511_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 
 	adv7511_packet_disable(adv7511, 0xffff);
 
+	printk("JDB: i2c_addr = 0x%x\n", edid_i2c_addr >> 1);
 	adv7511->i2c_edid = i2c_new_dummy(i2c->adapter, edid_i2c_addr >> 1);
 	if (!adv7511->i2c_edid) {
 		ret = -ENOMEM;

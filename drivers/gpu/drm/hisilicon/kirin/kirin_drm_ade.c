@@ -234,6 +234,7 @@ static void ade_ldi_set_mode(struct ade_crtc *acrtc,
 	writel(((width - 1) << OUTPUT_XSIZE_OFST) | (height - 1),
 	       base + ADE_OVLY_OUTPUT_SIZE(OUT_OVLY));
 
+	DRM_INFO("ade_ldi_set_mode: orig_clock: %ld  adj_clock: %ld\n", (long) mode->clock, (long)adj_mode->clock);
 	/* ctran6 setting */
 	writel(CTRAN_BYPASS_ON, base + ADE_CTRAN_DIS(ADE_CTRAN6));
 	 /* the configured value is actual value - 1 */
@@ -242,13 +243,15 @@ static void ade_ldi_set_mode(struct ade_crtc *acrtc,
 
 	ade_set_pix_clk(ctx, mode, adj_mode);
 
-	DRM_DEBUG_DRIVER("set mode: %dx%d\n", width, height);
+	DRM_INFO("set mode: %dx%d\n", width, height);
 }
 
 static int ade_power_up(struct ade_hw_ctx *ctx)
 {
 	int ret;
 
+	printk("JDB: %s\n", __func__);
+	dump_stack();
 	ret = clk_prepare_enable(ctx->media_noc_clk);
 	if (ret) {
 		DRM_ERROR("failed to enable media_noc_clk (%d)\n", ret);
@@ -275,6 +278,9 @@ static int ade_power_up(struct ade_hw_ctx *ctx)
 static void ade_power_down(struct ade_hw_ctx *ctx)
 {
 	void __iomem *base = ctx->base;
+
+	printk("JDB: %s\n", __func__);
+	dump_stack();
 
 	writel(ADE_DISABLE, base + LDI_CTRL);
 	/* dsi pixel off */
@@ -361,6 +367,7 @@ static void ade_display_enable(struct ade_crtc *acrtc)
 	void __iomem *base = ctx->base;
 	u32 out_fmt = acrtc->out_format;
 
+	printk("JDB: %s\n", __func__);
 	/* enable output overlay compositor */
 	writel(ADE_ENABLE, base + ADE_OVLYX_CTL(OUT_OVLY));
 	ade_update_reload_bit(base, OVLY_OFST + OUT_OVLY, 0);
@@ -475,6 +482,8 @@ static void ade_crtc_enable(struct drm_crtc *crtc)
 	struct ade_hw_ctx *ctx = acrtc->ctx;
 	int ret;
 
+	printk("JDB: %s\n", __func__);
+	dump_stack();
 	if (acrtc->enable)
 		return;
 
@@ -496,6 +505,7 @@ static void ade_crtc_disable(struct drm_crtc *crtc)
 	struct ade_crtc *acrtc = to_ade_crtc(crtc);
 	struct ade_hw_ctx *ctx = acrtc->ctx;
 
+	printk("JDB: %s\n", __func__);
 	if (!acrtc->enable)
 		return;
 
@@ -510,7 +520,7 @@ static enum drm_mode_status ade_crtc_mode_valid(struct drm_crtc *crtc,
 	/*
 	 * kirin_ade cannot generate all modes, so use the whitelist below
 	 */
-	DRM_DEBUG("Checking mode %ix%i@%i clock: %i...",
+	printk("Checking mode %ix%i@%i clock: %i...",
 		  mode->hdisplay, mode->vdisplay, drm_mode_vrefresh(mode), mode->clock);
 	if ((mode->hdisplay == 1920 && mode->vdisplay == 1080 && mode->clock == 148500) ||
 	    (mode->hdisplay == 1920 && mode->vdisplay == 1080 && mode->clock == 80192)  ||
@@ -534,10 +544,10 @@ static enum drm_mode_status ade_crtc_mode_valid(struct drm_crtc *crtc,
 	    (mode->hdisplay == 800  && mode->vdisplay == 600  && mode->clock == 48907)  ||
 	    (mode->hdisplay == 800  && mode->vdisplay == 600  && mode->clock == 40000)) {
 		mode->type |= DRM_MODE_TYPE_PREFERRED;
-		DRM_DEBUG("OK\n");
+		printk("OK\n");
 		return MODE_OK;
 	}
-	DRM_DEBUG("BAD\n");
+	printk("BAD\n");
 	return MODE_BAD;
 }
 
@@ -548,6 +558,7 @@ static void ade_crtc_mode_set_nofb(struct drm_crtc *crtc)
 	struct drm_display_mode *mode = &crtc->state->mode;
 	struct drm_display_mode *adj_mode = &crtc->state->adjusted_mode;
 
+	printk("JDB: %s\n", __func__);
 	if (!ctx->power_on)
 		(void)ade_power_up(ctx);
 	ade_ldi_set_mode(acrtc, mode, adj_mode);

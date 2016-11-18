@@ -2920,6 +2920,8 @@ int drm_atomic_helper_connector_dpms(struct drm_connector *connector,
 	if (mode != DRM_MODE_DPMS_ON)
 		mode = DRM_MODE_DPMS_OFF;
 
+	printk("JDB: drm_atomic_helper_connector_dpms(%i)\n", mode);
+
 	connector->dpms = mode;
 	crtc = connector->state->crtc;
 
@@ -2953,6 +2955,7 @@ retry:
 	drm_connector_list_iter_put(&conn_iter);
 	crtc_state->active = active;
 
+	printk("JDB drm_atomic_helper_connector_dpms - committing\n");
 	ret = drm_atomic_commit(state);
 fail:
 	if (ret == -EDEADLK)
@@ -2960,9 +2963,11 @@ fail:
 	if (ret != 0)
 		connector->dpms = old_mode;
 	drm_atomic_state_put(state);
+	printk("JDB drm_atomic_helper_connector_dpms - done\n");
 	return ret;
 
 backoff:
+	printk("JDB drm_atomic_helper_connector_dpms - backoff\n");
 	drm_atomic_state_clear(state);
 	drm_atomic_legacy_backoff(state);
 

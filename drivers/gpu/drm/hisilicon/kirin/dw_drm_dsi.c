@@ -457,6 +457,8 @@ static void dsi_set_mode_timing(void __iomem *base,
 	u32 val;
 	u64 tmp;
 
+	printk("JDB: dsi_set_mode_timing!\n");
+
 	val = dsi_get_dpi_color_coding(format);
 	writel(val, base + DPI_COLOR_CODING);
 
@@ -501,11 +503,11 @@ static void dsi_set_mode_timing(void __iomem *base,
 	writel(mode->vdisplay, base + VID_VACTIVE_LINES);
 	writel(mode->hdisplay, base + VID_PKT_SIZE);
 
-	DRM_DEBUG_DRIVER("htot=%d, hfp=%d, hbp=%d, hsw=%d\n",
+	DRM_INFO("htot=%d, hfp=%d, hbp=%d, hsw=%d\n",
 			 htot, hfp, hbp, hsw);
-	DRM_DEBUG_DRIVER("vtol=%d, vfp=%d, vbp=%d, vsw=%d\n",
+	DRM_INFO("vtol=%d, vfp=%d, vbp=%d, vsw=%d\n",
 			 vtot, vfp, vbp, vsw);
-	DRM_DEBUG_DRIVER("hsa_time=%d, hbp_time=%d, hline_time=%d\n",
+	DRM_INFO("hsa_time=%d, hbp_time=%d, hline_time=%d\n",
 			 hsa_time, hbp_time, hline_time);
 }
 
@@ -563,7 +565,7 @@ static void dsi_mipi_init(struct dw_dsi *dsi)
 	/* dsi wake up */
 	writel(POWERUP, base + PWR_UP);
 
-	DRM_DEBUG_DRIVER("lanes=%d, pixel_clk=%d kHz, bytes_freq=%d kHz\n",
+	printk("dsi_mipi_init: lanes=%d, pixel_clk=%d kHz, bytes_freq=%d kHz\n",
 			 dsi->lanes, mode->clock, phy->lane_byte_clk_kHz);
 }
 
