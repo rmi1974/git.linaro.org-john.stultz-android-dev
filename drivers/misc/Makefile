@@ -57,3 +57,5 @@ obj-$(CONFIG_ECHO)		+= echo/
 obj-$(CONFIG_VEXPRESS_SYSCFG)	+= vexpress-syscfg.o
 obj-$(CONFIG_CXL_BASE)		+= cxl/
 obj-$(CONFIG_HI3660_SYSCFG)     += hi3660-sysconfig.o
+obj-y	     += microchip/
+obj-y	     += farichild/
