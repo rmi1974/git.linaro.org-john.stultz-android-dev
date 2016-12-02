@@ -267,7 +267,7 @@
 			compatible = "arm,pl011", "arm,primecell";
 			reg = <0x0 0xffd74000 0x0 0x1000>;
 			interrupts = <GIC_SPI 114 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&crg_ctrl HI3660_CLK_FACTOR_UART3>,
+			clocks = <&crg_ctrl HI3660_FACTOR_UART3>,
 				 <&crg_ctrl HI3660_PCLK>;
 			clock-names = "uartclk", "apb_pclk";
 			reset-enable-flag = <0>;
