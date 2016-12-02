@@ -99,6 +99,12 @@
 			status = "ok";
 		};
 
+		iomcu: iomcu@ffd7e000 {
+			compatible = "hisilicon,hi3660-iomcu", "syscon";
+			reg = <0x0 0xffd7e000 0x0 0x1000>;
+			#clock-cells = <1>;
+		};
+
 		i2c0: i2c@FFD71000 {
 			compatible = "snps,designware-i2c";
 			reg = <0x0 0xFFD71000 0x0 0x1000>;
