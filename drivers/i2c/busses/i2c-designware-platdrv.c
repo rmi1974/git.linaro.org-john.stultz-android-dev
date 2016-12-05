@@ -37,6 +37,7 @@
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/io.h>
+#include <linux/reset.h>
 #include <linux/slab.h>
 #include <linux/acpi.h>
 #include <linux/platform_data/i2c-designware.h>
@@ -157,6 +158,10 @@ static int dw_i2c_plat_probe(struct platform_device *pdev)
 	dev->dev = &pdev->dev;
 	dev->irq = irq;
 	platform_set_drvdata(pdev, dev);
+
+	dev->rst = devm_reset_control_get(&pdev->dev, NULL);
+	if (!IS_ERR(dev->rst))
+		reset_control_reset(dev->rst);
 
 	/* fast mode by default because of legacy reasons */
 	clk_freq = 400000;
