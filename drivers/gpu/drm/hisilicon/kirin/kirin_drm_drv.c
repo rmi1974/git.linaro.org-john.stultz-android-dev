@@ -261,6 +261,7 @@ static int kirin_drm_bind(struct device *dev)
 		 driver->name, driver->major, driver->minor, driver->patchlevel,
 		 driver->date, drm_dev->primary->index);
 
+	dev_set_drvdata(dev, drm_dev);
 	return 0;
 
 err_drm_dev_unregister:
@@ -312,6 +313,62 @@ static struct device_node *kirin_get_remote_node(struct device_node *np)
 	return remote;
 }
 
+static int kirin_drm_suspend(struct device *dev)
+{
+	struct drm_device *drm = dev_get_drvdata(dev);
+	struct drm_connector *connector;
+
+	drm_kms_helper_poll_disable(drm);
+
+	drm_modeset_lock_all(drm);
+	list_for_each_entry(connector, &drm->mode_config.connector_list, head) {
+		int old_dpms = connector->dpms;
+
+		if (connector->funcs->dpms)
+			connector->funcs->dpms(connector, DRM_MODE_DPMS_OFF);
+
+		/* Set the old mode back to the connector for resume */
+		connector->dpms = old_dpms;
+	}
+	drm_modeset_unlock_all(drm);
+
+	return 0;
+}
+
+static int kirin_drm_resume(struct device *dev)
+{
+	struct drm_device *drm = dev_get_drvdata(dev);
+	struct drm_connector *connector;
+
+	/* reset all the states of crtc/plane/encoder/connector */
+	drm_mode_config_reset(drm);
+
+	/* init kms poll for handling hpd */
+	drm_kms_helper_poll_init(drm);
+
+	/* force detection after connectors init */
+	(void)drm_helper_hpd_irq_event(drm);
+
+	drm_modeset_lock_all(drm);
+	list_for_each_entry(connector, &drm->mode_config.connector_list, head) {
+		if (connector->funcs->dpms) {
+			int dpms = connector->dpms;
+
+			connector->dpms = DRM_MODE_DPMS_OFF;
+			connector->funcs->dpms(connector, dpms);
+		}
+	}
+	drm_modeset_unlock_all(drm);
+
+	drm_kms_helper_poll_enable(drm);
+
+	return 0;
+}
+
+static const struct dev_pm_ops kirin_drm_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(kirin_drm_suspend, kirin_drm_resume)
+};
+
 static int kirin_drm_platform_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -357,6 +414,7 @@ static struct platform_driver kirin_drm_platform_driver = {
 	.driver = {
 		.name = "kirin-drm",
 		.of_match_table = kirin_drm_dt_ids,
+		.pm = &kirin_drm_pm_ops,
 	},
 };
 
