@@ -369,12 +369,51 @@ static const struct dev_pm_ops kirin_drm_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(kirin_drm_suspend, kirin_drm_resume)
 };
 
+static ssize_t
+sysfs_show_current_drmstate(struct device *dev,
+                               struct device_attribute *attr, char *buf)
+{
+       ssize_t count = 0;
+
+       count = snprintf(buf, PAGE_SIZE, "%s\n", "johntest");
+
+       return count;
+}
+static ssize_t sysfs_set_drmstate(struct device *dev,
+                                       struct device_attribute *attr,
+                                       const char *buf, size_t count)
+{
+       ssize_t ret = count;
+
+       if (count < 1)
+               return count;
+
+       /* strip of \n: */
+       if (buf[count-1] == '\n')
+               count--;
+
+       if (!strncmp(buf, "off", count)) {
+               kirin_drm_suspend(dev);
+       } else if (!strncmp(buf, "on", count)) {
+               kirin_drm_resume(dev);
+       } else {
+               printk("JDB: dunno what that is..\n");
+       }
+
+       return ret;
+
+}
+static DEVICE_ATTR(drm_test_state, 0644, sysfs_show_current_drmstate,
+                       sysfs_set_drmstate);
+
 static int kirin_drm_platform_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
 	struct component_match *match = NULL;
 	struct device_node *remote;
+	int error;
+	error = device_create_file(dev, &dev_attr_drm_test_state);
 
 	dc_ops = (struct kirin_dc_ops *)of_device_get_match_data(dev);
 	if (!dc_ops) {
