@@ -14,15 +14,18 @@
 / {
 	model = "HiKey960";
 	compatible = "hisilicon,hi3660-hikey960", "hisilicon,hi3660";
-	hisi,boardid = <5 3 0 0>;
 
 	aliases {
-		serial5 = &uart5;       /* console UART */
+		serial0 = &uart0;
+		serial1 = &uart1;
+		serial2 = &uart2;
+		serial3 = &uart3;
+		serial4 = &uart4;
+		serial5 = &uart5;
+		serial6 = &uart6;
 	};
 
-	chosen {
-		stdout-path = "serial5:115200n8";
-	};
+	chosen {};
 
 	memory@0 {
 		device_type = "memory";
@@ -31,6 +34,10 @@
 
 	soc {
 		uart5: serial@fdf05000 {
+			status = "ok";
+		};
+
+		uart6: serial@fff32000 {
 			status = "ok";
 		};
 	};
