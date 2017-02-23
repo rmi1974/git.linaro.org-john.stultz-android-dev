@@ -750,5 +750,72 @@
 			clock-names = "apb_pclk";
 			status = "ok";
 		};
+
+		pmic: pmic@fff34000 {
+			compatible = "hisilicon,hi6421-pmic";
+			reg = <0x0 0xfff34000 0x0 0x1000>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			status = "ok";
+
+			regulators {
+				ldo1: LDO1 {
+					regulator-compatible =
+							"hi6421v530_ldo1";
+					regulator-name = "LDO1";
+					regulator-min-microvolt = <1000000>;
+					regulator-max-microvolt = <1500000>;
+					regulator-always-on;
+					regulator-enable-ramp-delay = <120>;
+				};
+
+				ldo3: LDO3 {
+					regulator-compatible =
+							"hi6421v530_ldo3";
+					regulator-name = "LDO3";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <2200000>;
+					regulator-always-on;
+					regulator-enable-ramp-delay = <120>;
+				};
+
+				ldo9: LDO9 {
+					regulator-compatible =
+							"hi6421v530_ldo9";
+					regulator-name = "LDO9";
+					regulator-min-microvolt = <1750000>;
+					regulator-max-microvolt = <3300000>;
+					regulator-enable-ramp-delay = <240>;
+				};
+
+				ldo11: LDO11 {
+					regulator-compatible =
+							"hi6421v530_ldo11";
+					regulator-name = "LDO11";
+					regulator-min-microvolt = <1750000>;
+					regulator-max-microvolt = <3300000>;
+					regulator-enable-ramp-delay = <240>;
+				};
+
+				ldo15: LDO15 {
+					regulator-compatible =
+							"hi6421v530_ldo15";
+					regulator-name = "LDO15";
+					regulator-min-microvolt = <1750000>;
+					regulator-max-microvolt = <3000000>;
+					regulator-always-on;
+					regulator-enable-ramp-delay = <120>;
+				};
+
+				ldo16: LDO16 {
+					regulator-compatible =
+							"hi6421v530_ldo16";
+					regulator-name = "LDO16";
+					regulator-min-microvolt = <1750000>;
+					regulator-max-microvolt = <3000000>;
+					regulator-enable-ramp-delay = <360>;
+				};
+			};
+		};
 	};
 };
