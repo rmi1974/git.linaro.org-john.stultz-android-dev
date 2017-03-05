@@ -150,6 +150,7 @@ int hi6210_i2s_startup(struct snd_pcm_substream *substream,
 	val &= ~(BIT(5) | BIT(4));
 	hi6210_write_reg(i2s, HII2S_APB_AFIFO_CFG_1, val);
 
+	/* XXX What is this -jstultz */
 
 	val = hi6210_read_reg(i2s, HII2S_SW_RST_N);
 	val &= ~(HII2S_SW_RST_N__ST_DL_WORDLEN_MASK <<
@@ -329,6 +330,7 @@ static int hi6210_i2s_hw_params(struct snd_pcm_substream *substream,
 	i2s->channels = params_channels(params);
 	i2s->channel_length = i2s->channels * i2s->bits;
 
+	/* XXX What is this -jstultz */
 	val = hi6210_read_reg(i2s, HII2S_ST_DL_FIFO_TH_CFG);
 	val &= ~((HII2S_ST_DL_FIFO_TH_CFG__ST_DL_R_AEMPTY_MASK <<
 			HII2S_ST_DL_FIFO_TH_CFG__ST_DL_R_AEMPTY_SHIFT) |
@@ -344,7 +346,7 @@ static int hi6210_i2s_hw_params(struct snd_pcm_substream *substream,
 		(30 << HII2S_ST_DL_FIFO_TH_CFG__ST_DL_L_AFULL_SHIFT));
 	hi6210_write_reg(i2s, HII2S_ST_DL_FIFO_TH_CFG, val);
 
-
+	/* XXX What is this -jstultz */
 	val = hi6210_read_reg(i2s, HII2S_IF_CLK_EN_CFG);
 	val |= (BIT(19) | BIT(18) | BIT(17) |
 		HII2S_IF_CLK_EN_CFG__S2_IF_CLK_EN |
@@ -354,7 +356,7 @@ static int hi6210_i2s_hw_params(struct snd_pcm_substream *substream,
 		HII2S_IF_CLK_EN_CFG__ST_DL_L_EN);
 	hi6210_write_reg(i2s, HII2S_IF_CLK_EN_CFG, val);
 
-
+	/* XXX What is this -jstultz */
 	val = hi6210_read_reg(i2s, HII2S_DIG_FILTER_CLK_EN_CFG);
 	val &= ~(HII2S_DIG_FILTER_CLK_EN_CFG__DACR_SDM_EN |
 		 HII2S_DIG_FILTER_CLK_EN_CFG__DACR_HBF2I_EN |
@@ -366,12 +368,13 @@ static int hi6210_i2s_hw_params(struct snd_pcm_substream *substream,
 		HII2S_DIG_FILTER_CLK_EN_CFG__DACL_MIXER_EN);
 	hi6210_write_reg(i2s, HII2S_DIG_FILTER_CLK_EN_CFG, val);
 
-
+	/* XXX What is this -jstultz */
 	val = hi6210_read_reg(i2s, HII2S_DIG_FILTER_MODULE_CFG);
 	val &= ~(HII2S_DIG_FILTER_MODULE_CFG__DACR_MIXER_IN2_MUTE |
 		 HII2S_DIG_FILTER_MODULE_CFG__DACL_MIXER_IN2_MUTE);
 	hi6210_write_reg(i2s, HII2S_DIG_FILTER_MODULE_CFG, val);
 
+	/* XXX What is this -jstultz */
 	val = hi6210_read_reg(i2s, HII2S_MUX_TOP_MODULE_CFG);
 	val &= ~(HII2S_MUX_TOP_MODULE_CFG__S2_OL_MIXER_IN1_MUTE |
 		 HII2S_MUX_TOP_MODULE_CFG__S2_OL_MIXER_IN2_MUTE |
@@ -418,6 +421,7 @@ static int hi6210_i2s_hw_params(struct snd_pcm_substream *substream,
 	hi6210_write_reg(i2s, HII2S_I2S_CFG, val);
 
 
+	/* XXX What is this -jstultz */
 	val = hi6210_read_reg(i2s, HII2S_CLK_SEL);
 	val &= ~(HII2S_CLK_SEL__I2S_BT_FM_SEL | /* BT gets the I2S */
 			HII2S_CLK_SEL__EXT_12_288MHZ_SEL);
