@@ -294,7 +294,7 @@ static int hi6421v530_regulator_register(struct platform_device *pdev,
 	}
 
 	rdev->constraints->valid_modes_mask = info->mode_mask;
-	rdev->constraints->valid_ops_mask =
+	rdev->constraints->valid_ops_mask |=
 			REGULATOR_CHANGE_VOLTAGE | REGULATOR_CHANGE_MODE;
 
 	return 0;
