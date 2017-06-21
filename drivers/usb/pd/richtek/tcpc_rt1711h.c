@@ -29,7 +29,7 @@
 #include <linux/kthread.h>
 #include <linux/cpu.h>
 #include <linux/version.h>
-#include <linux/sched/clock.h>
+#include <linux/sched.h>
 #include <linux/hisi/usb/pd/richtek/tcpci.h>
 #include <linux/hisi/usb/pd/richtek/rt1711h.h>
 #include <linux/hisi/log/hisi_log.h>

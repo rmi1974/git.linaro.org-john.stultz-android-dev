@@ -22,7 +22,7 @@
 #include <linux/cpu.h>
 #include <linux/delay.h>
 
-#include <uapi/linux/sched/types.h>
+#include <linux/sched.h>
 #include <linux/hisi/usb/pd/richtek/tcpci_core.h>
 #ifdef CONFIG_USB_POWER_DELIVERY
 #include <linux/hisi/usb/pd/richtek/pd_core.h>
