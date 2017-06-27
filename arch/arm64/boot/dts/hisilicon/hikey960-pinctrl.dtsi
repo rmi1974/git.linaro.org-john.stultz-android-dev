@@ -351,5 +351,25 @@
 			};
 		};
 
+		pmx9: pinmux@fff11800 {
+			compatible = "pinconf-single";
+			reg = <0x0 0xfff11800 0x0 0xbc>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			pinctrl-single,register-width = <32>;
+
+			
+			i2s2_cfg_func: i2s2_cfg_func {
+				pinctrl-single,pins = <
+					0x050 0x0 /* I2S2_DI */
+					0x054 0x0 /* I2S2_DO */
+					0x058 0x0 /* I2S2_XCLK */
+					0x05c 0x0 /* I2S2_XFS */
+				>;
+				pinctrl-single,bias-pulldown  = <PULL_DIS  PULL_DOWN PULL_DIS  PULL_DOWN>;
+				pinctrl-single,bias-pullup    = <PULL_DIS  PULL_UP   PULL_DIS  PULL_UP>;
+				pinctrl-single,drive-strength = <DRIVE7_02MA DRIVE6_MASK>;
+			};
+		};
 	};
 };
