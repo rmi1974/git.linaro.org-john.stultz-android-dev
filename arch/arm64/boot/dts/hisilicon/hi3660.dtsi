@@ -500,11 +500,6 @@
 			pinctrl-0 = <&i2c1_pmx_func &i2c1_cfg_func>;
 			status = "ok";
 
-			fusb30x@22 {
-				status = "disabled";
-				fairchild,int_n = <&gpio27 3 0>;
-			};
-
 			rt1711@4e {
 				compatible = "richtek,rt1711";
 				reg = <0x4e>;
@@ -512,32 +507,30 @@
 				rt1711,irq_pin = <&gpio27 3 0>;
 				pinctrl-names = "default";
 				pinctrl-0 = <&usb_cfg_func>;
-				/*gpios = <&gpio27 3 0>, <&gpio25 2 0>, <&gpio25 6 0>, <&gpio9 1 0>, <&gpio9 2 0>;*/
-				/*gpio_nums = <219 202 206 73 74>;*/
-				rt-dual,supported_modes = <0>; /* 0: dfp/ufp, 1: dfp, 2: ufp */
-				rt-tcpc,name = "type_c_port0"; /* tcpc_device's name */
-				rt-tcpc,role_def = <2>; /* 0: SNK Only, 1: SRC Only, 2: DRP, 3: Try.SRC, 4: Try.SNK */
-				rt-tcpc,rp_level = <0>; /* 0: Default, 1: 1.5, 2: 3.0 */
-				rt-tcpc,notifier_supply_num = <0>; /* the number of notifier supply */
+				/* 0: dfp/ufp, 1: dfp, 2: ufp */
+				rt-dual,supported_modes = <0>;
+				/* tcpc_device's name */
+				rt-tcpc,name = "type_c_port0";
+				/* 0: SNK Only, 1: SRC Only, 2: DRP, 3: Try.SRC, 4: Try.SNK */
+				rt-tcpc,role_def = <2>;
+				/* 0: Default, 1: 1.5, 2: 3.0 */
+				rt-tcpc,rp_level = <0>;
+				/* the number of notifier supply */
+				rt-tcpc,notifier_supply_num = <0>;
+
 				pd-data {
 					pd,source-pdo-size = <1>;
-					pd,source-pdo-data = <0x00019064>;  /*<0x019014>;*/
+					/*<0x019014>;*/
+					pd,source-pdo-data = <0x00019064>;
 
 					pd,sink-pdo-size = <2>;
-					pd,sink-pdo-data = <0x000190c8 0x0002d0c8> ;   /* 0x0002d0c8 : 9V, 2A */
-
-					/*
-					No DP
-					pd,id-vdo-size = <3>;
-					pd,id-vdo-data = <0x500029cf 0x0 0x00010000>;
-					With DP
-					pd,id-vdo-size = <4>;
-					pd,id-vdo-data = <0xec0029cf 0x0 0x00010000 0x11000001>;
-					*/
+					/* 0x0002d0c8 : 9V, 2A */
+					pd,sink-pdo-data = <0x000190c8 0x0002d0c8>;
 
 					pd,id-vdo-size = <3>;
 					pd,id-vdo-data = <0xd00029cf 0x0 0x00010000>;
 				};
+
 				dpm_caps {
 					local_dr_power;
 					local_dr_data;
@@ -568,36 +561,6 @@
 					snk_prefer_low_voltage;
 					snk_ignore_mismatch_current;
 				};
-				displayport {
-					/* connection type = "both", "ufp_d", "dfp_d" */
-					1st_connection = "dfp_d";
-					2nd_connection = "dfp_d";
-					signal,dp_v13;
-					//signal,dp_gen2;
-					//usbr20_not_used;
-					typec,receptacle;
-					ufp_d {
-						//pin_assignment,mode_a;
-						//pin_assignment,mode_b;
-						//pin_assignment,mode_c;
-						//pin_assignment,mode_d;
-						//pin_assignment,mode_e;
-					};
-					dfp_d {
-						/* Only support mode C & D */
-						//pin_assignment,mode_a;
-						//pin_assignment,mode_b;
-						pin_assignment,mode_c;
-						pin_assignment,mode_d;
-						//pin_assignment,mode_e;
-						//pin_assignment,mode_f;
-					};
-				};
-			};
-
-			tusb422@20 {
-				status = "disabled";
-				ti,alert-gpio = <&gpio27 3 0>;
 			};
 
 			adv7533: adv7533@39 {
@@ -628,16 +591,27 @@
 			status = "ok";
 		};
 
-           	hub: gpio_hub{
-           		compatible = "hisilicon,gpio_hub";
-           		typc_vbus_int_gpio,typec-gpios = <&gpio25 2 0>;
-           		otg_gpio = <&gpio25 6 0>;
+		hubv1: gpio_hubv1 {
+			compatible = "hisilicon,gpio_hubv1";
+			typc_vbus_int_gpio,typec-gpios = <&gpio25 2 0>;
+			typc_vbus_enable_val = <0>;
 			hub_vdd12_en_gpio = <&gpio9 1 0>;
 			hub_vdd33_en_gpio = <&gpio9 2 0>;
+			status = "disabled";
+		};
+
+		hubv2: gpio_hubv2 {
+			compatible = "hisilicon,gpio_hubv2";
+			typc_vbus_int_gpio,typec-gpios = <&gpio25 2 0>;
+			typc_vbus_enable_val = <1>;
+			otg_gpio = <&gpio25 6 0>;
+			hub_vdd12_en_gpio = <&gpio2 1 0>;
+			hub_vdd33_en_gpio = <&gpio5 6 0>;
 			hub_reset_en_gpio = <&gpio4 4 0>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&usbhub5734_pmx_func>;
-	    	};
+			status = "disabled";
+		};
 
 		i2c2: i2c@FFD73000 {
 			compatible = "snps,designware-i2c";
@@ -1339,7 +1313,6 @@
 			status = "ok";
 		};
 
-
 		sound {
 			compatible = "simple-audio-card";
 			simple-audio-card,name = "hikey-hdmi";
@@ -1357,14 +1330,6 @@
 			};
 		};
 
-/*
-		hisi_hdmi_card: hisi_hdmi_card {
-			compatible = "hisilicon,hisi-hdmi-audio-card";
-			reg = <0 0 0 0>;
-			sound-dai = <&i2s0>;
-			status = "ok";
-		};
-*/
 		tsensor: tsensor {
 			compatible = "hisilicon,thermal-hi3660";
 			mbox-names = "mbox-tx";
@@ -1412,6 +1377,7 @@
 			};
 		};
 	};
+
 	its_pcie: interrupt-controller@f4000000 {
 		compatible = "arm,gic-v3-its";
 		msi-controller;
