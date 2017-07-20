@@ -105,8 +105,6 @@ source "drivers/usb/chipidea/Kconfig"
 
 source "drivers/usb/isp1760/Kconfig"
 
-source "drivers/usb/pd/Kconfig"
-
 comment "USB port drivers"
 
 if USB
@@ -151,8 +149,6 @@ endif # USB
 source "drivers/usb/phy/Kconfig"
 
 source "drivers/usb/gadget/Kconfig"
-
-source "drivers/usb/typec/Kconfig"
 
 config USB_LED_TRIG
 	bool "USB LED Triggers"

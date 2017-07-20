@@ -1847,7 +1847,7 @@ out:
 	return status;
 }
 
-static const struct usb_ep_ops qe_ep_ops = {
+static struct usb_ep_ops qe_ep_ops = {
 	.enable = qe_ep_enable,
 	.disable = qe_ep_disable,
 

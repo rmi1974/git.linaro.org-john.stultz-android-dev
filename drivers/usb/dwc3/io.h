@@ -28,13 +28,6 @@ static inline u32 dwc3_readl(void __iomem *base, u32 offset)
 {
 	u32 value;
 
-#ifdef CONFIG_USB_DWC3_HISI
-	extern atomic_t hisi_dwc3_power_on;
-
-	if (unlikely(atomic_read(&hisi_dwc3_power_on) == 0))
-		return 0;
-#endif
-
 	/*
 	 * We requested the mem region starting from the Globals address
 	 * space, see dwc3_probe in core.c.
@@ -47,20 +40,14 @@ static inline u32 dwc3_readl(void __iomem *base, u32 offset)
 	 * documentation, so we revert it back to the proper addresses, the
 	 * same way they are described on SNPS documentation
 	 */
-	trace_dwc3_readl(base - DWC3_GLOBALS_REGS_START, offset, value);
+	dwc3_trace(trace_dwc3_readl, "addr %p value %08x",
+			base - DWC3_GLOBALS_REGS_START + offset, value);
 
 	return value;
 }
 
 static inline void dwc3_writel(void __iomem *base, u32 offset, u32 value)
 {
-#ifdef CONFIG_USB_DWC3_HISI
-	extern atomic_t hisi_dwc3_power_on;
-
-	if (unlikely(atomic_read(&hisi_dwc3_power_on) == 0))
-		return;
-#endif
-
 	/*
 	 * We requested the mem region starting from the Globals address
 	 * space, see dwc3_probe in core.c.
@@ -73,7 +60,8 @@ static inline void dwc3_writel(void __iomem *base, u32 offset, u32 value)
 	 * documentation, so we revert it back to the proper addresses, the
 	 * same way they are described on SNPS documentation
 	 */
-	trace_dwc3_writel(base - DWC3_GLOBALS_REGS_START, offset, value);
+	dwc3_trace(trace_dwc3_writel, "addr %p value %08x",
+			base - DWC3_GLOBALS_REGS_START + offset, value);
 }
 
 #endif /* __DRIVERS_USB_DWC3_IO_H */

@@ -182,8 +182,14 @@ static char *usb_dump_endpoint_descriptor(int speed, char *start, char *end,
 
 	dir = usb_endpoint_dir_in(desc) ? 'I' : 'O';
 
-	if (speed == USB_SPEED_HIGH)
-		bandwidth = usb_endpoint_maxp_mult(desc);
+	if (speed == USB_SPEED_HIGH) {
+		switch (usb_endpoint_maxp(desc) & (0x03 << 11)) {
+		case 1 << 11:
+			bandwidth = 2; break;
+		case 2 << 11:
+			bandwidth = 3; break;
+		}
+	}
 
 	/* this isn't checking for illegal values */
 	switch (usb_endpoint_type(desc)) {
@@ -227,7 +233,7 @@ static char *usb_dump_endpoint_descriptor(int speed, char *start, char *end,
 
 	start += sprintf(start, format_endpt, desc->bEndpointAddress, dir,
 			 desc->bmAttributes, type,
-			 usb_endpoint_maxp(desc) *
+			 (usb_endpoint_maxp(desc) & 0x07ff) *
 			 bandwidth,
 			 interval, unit);
 	return start;
