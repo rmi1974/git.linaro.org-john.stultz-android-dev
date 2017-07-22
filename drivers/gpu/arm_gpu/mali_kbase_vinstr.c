@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -98,6 +98,9 @@ enum vinstr_state {
  * @thread:            periodic sampling thread
  * @waitq:             notification queue of sampling thread
  * @request_pending:   request for action for sampling thread
+ * @clients_present:   when true, we have at least one client
+ *                     Note: this variable is in sync. with nclients and is
+ *                     present to preserve simplicity. Protected by state_lock.
  */
 struct kbase_vinstr_context {
 	struct mutex             lock;
@@ -126,6 +129,8 @@ struct kbase_vinstr_context {
 	struct task_struct       *thread;
 	wait_queue_head_t        waitq;
 	atomic_t                 request_pending;
+
+	bool                     clients_present;
 };
 
 /**
@@ -250,7 +255,7 @@ static void disable_hwcnt(struct kbase_vinstr_context *vinstr_ctx)
 
 	err = kbase_instr_hwcnt_disable_internal(kctx);
 	if (err) {
-		dev_warn(kbdev->dev, "Failed to disable HW counters (ctx:%pK)",
+		dev_warn(kbdev->dev, "Failed to disable HW counters (ctx:%p)",
 				kctx);
 		return;
 	}
@@ -261,7 +266,7 @@ static void disable_hwcnt(struct kbase_vinstr_context *vinstr_ctx)
 	/* Also release our Power Manager Active reference. */
 	kbase_pm_context_idle(kbdev);
 
-	dev_dbg(kbdev->dev, "HW counters dumping disabled for context %pK", kctx);
+	dev_dbg(kbdev->dev, "HW counters dumping disabled for context %p", kctx);
 }
 
 static int reprogram_hwcnt(struct kbase_vinstr_context *vinstr_ctx)
@@ -414,6 +419,7 @@ static int kbasep_vinstr_create_kctx(struct kbase_vinstr_context *vinstr_ctx)
 	spin_lock_irqsave(&vinstr_ctx->state_lock, flags);
 	if (VINSTR_IDLE == vinstr_ctx->state)
 		enable_backend = true;
+	vinstr_ctx->clients_present = true;
 	spin_unlock_irqrestore(&vinstr_ctx->state_lock, flags);
 	if (enable_backend)
 		err = enable_hwcnt(vinstr_ctx);
@@ -464,12 +470,18 @@ static void kbasep_vinstr_destroy_kctx(struct kbase_vinstr_context *vinstr_ctx)
 	struct kbasep_kctx_list_element *element;
 	struct kbasep_kctx_list_element *tmp;
 	bool                            found = false;
+	unsigned long                   flags;
 
 	/* Release hw counters dumping resources. */
 	vinstr_ctx->thread = NULL;
 	disable_hwcnt(vinstr_ctx);
 	kbasep_vinstr_unmap_kernel_dump_buffer(vinstr_ctx);
 	kbase_destroy_context(vinstr_ctx->kctx);
+
+	/* Simplify state transitions by specifying that we have no clients. */
+	spin_lock_irqsave(&vinstr_ctx->state_lock, flags);
+	vinstr_ctx->clients_present = false;
+	spin_unlock_irqrestore(&vinstr_ctx->state_lock, flags);
 
 	/* Remove kernel context from the device's contexts list. */
 	mutex_lock(&kbdev->kctx_list_lock);
@@ -1034,9 +1046,11 @@ static int kbasep_vinstr_fill_dump_buffer_legacy(
 
 	/* Copy data to user buffer. */
 	rcode = copy_to_user(buffer, cli->accum_buffer, cli->dump_size);
-	if (rcode)
+	if (rcode) {
 		pr_warn("error while copying buffer to user\n");
-	return rcode;
+		return -EFAULT;
+	}
+	return 0;
 }
 
 /**
@@ -1165,18 +1179,26 @@ static enum hrtimer_restart kbasep_vinstr_wake_up_callback(
  *
  * @data: Pointer to vinstr context structure.
  *
- * Return: Always returns zero.
+ * Return: 0 on success; -ENOMEM if timer allocation fails
  */
 static int kbasep_vinstr_service_task(void *data)
 {
 	struct kbase_vinstr_context        *vinstr_ctx = data;
-	struct kbasep_vinstr_wake_up_timer timer;
+	struct kbasep_vinstr_wake_up_timer *timer;
 
 	KBASE_DEBUG_ASSERT(vinstr_ctx);
 
-	hrtimer_init(&timer.hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	timer.hrtimer.function = kbasep_vinstr_wake_up_callback;
-	timer.vinstr_ctx       = vinstr_ctx;
+	timer = kmalloc(sizeof(*timer), GFP_KERNEL);
+
+	if (!timer) {
+		dev_warn(vinstr_ctx->kbdev->dev, "Timer allocation failed!\n");
+		return -ENOMEM;
+	}
+
+	hrtimer_init(&timer->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+
+	timer->hrtimer.function = kbasep_vinstr_wake_up_callback;
+	timer->vinstr_ctx       = vinstr_ctx;
 
 	while (!kthread_should_stop()) {
 		struct kbase_vinstr_client *cli = NULL;
@@ -1203,7 +1225,7 @@ static int kbasep_vinstr_service_task(void *data)
 			}
 		}
 
-		if (!cli || ((s64)timestamp - (s64)dump_time < 0LL)) {
+		if (!cli || ((s64)timestamp - (s64)dump_time < 0ll)) {
 			mutex_unlock(&vinstr_ctx->lock);
 
 			/* Sleep until next dumping event or service request. */
@@ -1211,7 +1233,7 @@ static int kbasep_vinstr_service_task(void *data)
 				u64 diff = dump_time - timestamp;
 
 				hrtimer_start(
-						&timer.hrtimer,
+						&timer->hrtimer,
 						ns_to_ktime(diff),
 						HRTIMER_MODE_REL);
 			}
@@ -1219,8 +1241,8 @@ static int kbasep_vinstr_service_task(void *data)
 					vinstr_ctx->waitq,
 					atomic_read(
 						&vinstr_ctx->request_pending) ||
-					kthread_should_stop());//lint !e666
-			hrtimer_cancel(&timer.hrtimer);
+					kthread_should_stop());
+			hrtimer_cancel(&timer->hrtimer);
 			continue;
 		}
 
@@ -1238,7 +1260,7 @@ static int kbasep_vinstr_service_task(void *data)
 			s64 tdiff =
 				(s64)(timestamp + DUMPING_RESOLUTION) -
 				(s64)cli->dump_time;
-			if (tdiff >= 0LL) {
+			if (tdiff >= 0ll) {
 				list_del(&cli->list);
 				list_add(&cli->list, &expired_requests);
 			} else {
@@ -1276,6 +1298,8 @@ static int kbasep_vinstr_service_task(void *data)
 
 		mutex_unlock(&vinstr_ctx->lock);
 	}
+
+	kfree(timer);
 
 	return 0;
 }
@@ -1991,8 +2015,17 @@ int kbase_vinstr_try_suspend(struct kbase_vinstr_context *vinstr_ctx)
 		break;
 
 	case VINSTR_IDLE:
-		vinstr_ctx->state = VINSTR_SUSPENDING;
-		schedule_work(&vinstr_ctx->suspend_work);
+		if (vinstr_ctx->clients_present) {
+			vinstr_ctx->state = VINSTR_SUSPENDING;
+			schedule_work(&vinstr_ctx->suspend_work);
+		} else {
+			vinstr_ctx->state = VINSTR_SUSPENDED;
+
+			vinstr_ctx->suspend_cnt++;
+			/* overflow shall not happen */
+			WARN_ON(0 == vinstr_ctx->suspend_cnt);
+			ret = 0;
+		}
 		break;
 
 	case VINSTR_DUMPING:
@@ -2016,7 +2049,7 @@ int kbase_vinstr_try_suspend(struct kbase_vinstr_context *vinstr_ctx)
 void kbase_vinstr_suspend(struct kbase_vinstr_context *vinstr_ctx)
 {
 	wait_event(vinstr_ctx->suspend_waitq,
-			(0 == kbase_vinstr_try_suspend(vinstr_ctx)));//lint !e666
+			(0 == kbase_vinstr_try_suspend(vinstr_ctx)));
 }
 
 void kbase_vinstr_resume(struct kbase_vinstr_context *vinstr_ctx)
@@ -2031,8 +2064,12 @@ void kbase_vinstr_resume(struct kbase_vinstr_context *vinstr_ctx)
 		BUG_ON(0 == vinstr_ctx->suspend_cnt);
 		vinstr_ctx->suspend_cnt--;
 		if (0 == vinstr_ctx->suspend_cnt) {
-			vinstr_ctx->state = VINSTR_RESUMING;
-			schedule_work(&vinstr_ctx->resume_work);
+			if (vinstr_ctx->clients_present) {
+				vinstr_ctx->state = VINSTR_RESUMING;
+				schedule_work(&vinstr_ctx->resume_work);
+			} else {
+				vinstr_ctx->state = VINSTR_IDLE;
+			}
 		}
 	}
 	spin_unlock_irqrestore(&vinstr_ctx->state_lock, flags);

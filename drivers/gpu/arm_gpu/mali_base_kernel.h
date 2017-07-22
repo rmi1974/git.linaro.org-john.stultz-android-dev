@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -17,30 +17,12 @@
 
 
 
-/**
- * @file
+/*
  * Base structures shared with the kernel.
  */
 
 #ifndef _BASE_KERNEL_H_
 #define _BASE_KERNEL_H_
-
-#ifndef __user
-#define __user
-#endif
-
-/* Support UK6 IOCTLS */
-#define BASE_LEGACY_UK6_SUPPORT 1
-
-/* Support UK7 IOCTLS */
-/* NB: To support UK6 we also need to support UK7 */
-#define BASE_LEGACY_UK7_SUPPORT 1
-
-/* Support UK8 IOCTLS */
-#define BASE_LEGACY_UK8_SUPPORT 1
-
-/* Support UK9 IOCTLS */
-#define BASE_LEGACY_UK9_SUPPORT 1
 
 /* Support UK10_2 IOCTLS */
 #define BASE_LEGACY_UK10_2_SUPPORT 1
@@ -80,8 +62,6 @@ typedef struct base_mem_handle {
 
 #define BASE_MAX_COHERENT_GROUPS 16
 
-#define BASE_DEBUG_FENCE_TIMEOUT 1
-
 #if defined CDBG_ASSERT
 #define LOCAL_ASSERT CDBG_ASSERT
 #elif defined KBASE_DEBUG_ASSERT
@@ -102,13 +82,6 @@ typedef struct base_mem_handle {
 #endif
 #endif
 
-/** 32/64-bit neutral way to represent pointers */
-typedef union kbase_pointer {
-	void __user *value;	  /**< client should store their pointers here */
-	u32 compat_value; /**< 64-bit kernels should fetch value here when handling 32-bit clients */
-	u64 sizer;	  /**< Force 64-bit storage for all clients regardless */
-} kbase_pointer;
-
 /**
  * @addtogroup base_user_api User-side Base APIs
  * @{
@@ -120,33 +93,44 @@ typedef union kbase_pointer {
  */
 
 /**
- * @brief Memory allocation, access/hint flags
+ * typedef base_mem_alloc_flags - Memory allocation, access/hint flags.
  *
  * A combination of MEM_PROT/MEM_HINT flags must be passed to each allocator
  * in order to determine the best cache policy. Some combinations are
- * of course invalid (eg @c MEM_PROT_CPU_WR | @c MEM_HINT_CPU_RD),
- * which defines a @a write-only region on the CPU side, which is
+ * of course invalid (e.g. MEM_PROT_CPU_WR | MEM_HINT_CPU_RD),
+ * which defines a write-only region on the CPU side, which is
  * heavily read by the CPU...
  * Other flags are only meaningful to a particular allocator.
  * More flags can be added to this list, as long as they don't clash
- * (see ::BASE_MEM_FLAGS_NR_BITS for the number of the first free bit).
+ * (see BASE_MEM_FLAGS_NR_BITS for the number of the first free bit).
  */
 typedef u32 base_mem_alloc_flags;
 
-/**
- * @brief Memory allocation, access/hint flags
+/* Memory allocation, access/hint flags.
  *
- * See ::base_mem_alloc_flags.
- *
+ * See base_mem_alloc_flags.
  */
-enum {
+
 /* IN */
-	BASE_MEM_PROT_CPU_RD = (1U << 0),      /**< Read access CPU side */
-	BASE_MEM_PROT_CPU_WR = (1U << 1),      /**< Write access CPU side */
-	BASE_MEM_PROT_GPU_RD = (1U << 2),      /**< Read access GPU side */
-	BASE_MEM_PROT_GPU_WR = (1U << 3),      /**< Write access GPU side */
-	BASE_MEM_PROT_GPU_EX = (1U << 4),      /**< Execute allowed on the GPU
-						    side */
+/* Read access CPU side
+ */
+#define BASE_MEM_PROT_CPU_RD ((base_mem_alloc_flags)1 << 0)
+
+/* Write access CPU side
+ */
+#define BASE_MEM_PROT_CPU_WR ((base_mem_alloc_flags)1 << 1)
+
+/* Read access GPU side
+ */
+#define BASE_MEM_PROT_GPU_RD ((base_mem_alloc_flags)1 << 2)
+
+/* Write access GPU side
+ */
+#define BASE_MEM_PROT_GPU_WR ((base_mem_alloc_flags)1 << 3)
+
+/* Execute allowed on the GPU side
+ */
+#define BASE_MEM_PROT_GPU_EX ((base_mem_alloc_flags)1 << 4)
 
 	/* BASE_MEM_HINT flags have been removed, but their values are reserved
 	 * for backwards compatibility with older user-space drivers. The values
@@ -159,54 +143,66 @@ enum {
 	 * RESERVED: (1U << 8)
 	 */
 
-	BASE_MEM_GROW_ON_GPF = (1U << 9),      /**< Grow backing store on GPU
-						    Page Fault */
+/* Grow backing store on GPU Page Fault
+ */
+#define BASE_MEM_GROW_ON_GPF ((base_mem_alloc_flags)1 << 9)
 
-	BASE_MEM_COHERENT_SYSTEM = (1U << 10), /**< Page coherence Outer
-						    shareable, if available */
-	BASE_MEM_COHERENT_LOCAL = (1U << 11),  /**< Page coherence Inner
-						    shareable */
-	BASE_MEM_CACHED_CPU = (1U << 12),      /**< Should be cached on the
-						    CPU */
+/* Page coherence Outer shareable, if available
+ */
+#define BASE_MEM_COHERENT_SYSTEM ((base_mem_alloc_flags)1 << 10)
+
+/* Page coherence Inner shareable
+ */
+#define BASE_MEM_COHERENT_LOCAL ((base_mem_alloc_flags)1 << 11)
+
+/* Should be cached on the CPU
+ */
+#define BASE_MEM_CACHED_CPU ((base_mem_alloc_flags)1 << 12)
 
 /* IN/OUT */
-	BASE_MEM_SAME_VA = (1U << 13), /**< Must have same VA on both the GPU
-					    and the CPU */
-/* OUT */
-	BASE_MEM_NEED_MMAP = (1U << 14), /**< Must call mmap to acquire a GPU
-					     address for the alloc */
-/* IN */
-	BASE_MEM_COHERENT_SYSTEM_REQUIRED = (1U << 15), /**< Page coherence
-					     Outer shareable, required. */
-	BASE_MEM_SECURE = (1U << 16),          /**< Secure memory */
-	BASE_MEM_DONT_NEED = (1U << 17),       /**< Not needed physical
-						    memory */
-	BASE_MEM_IMPORT_SHARED = (1U << 18),   /**< Must use shared CPU/GPU zone
-						    (SAME_VA zone) but doesn't
-						    require the addresses to
-						    be the same */
-};
+/* Must have same VA on both the GPU and the CPU
+ */
+#define BASE_MEM_SAME_VA ((base_mem_alloc_flags)1 << 13)
 
-/**
- * @brief Number of bits used as flags for base memory management
+/* OUT */
+/* Must call mmap to acquire a GPU address for the alloc
+ */
+#define BASE_MEM_NEED_MMAP ((base_mem_alloc_flags)1 << 14)
+
+/* IN */
+/* Page coherence Outer shareable, required.
+ */
+#define BASE_MEM_COHERENT_SYSTEM_REQUIRED ((base_mem_alloc_flags)1 << 15)
+
+/* Secure memory
+ */
+#define BASE_MEM_SECURE ((base_mem_alloc_flags)1 << 16)
+
+/* Not needed physical memory
+ */
+#define BASE_MEM_DONT_NEED ((base_mem_alloc_flags)1 << 17)
+
+/* Must use shared CPU/GPU zone (SAME_VA zone) but doesn't require the
+ * addresses to be the same
+ */
+#define BASE_MEM_IMPORT_SHARED ((base_mem_alloc_flags)1 << 18)
+
+/* Number of bits used as flags for base memory management
  *
- * Must be kept in sync with the ::base_mem_alloc_flags flags
+ * Must be kept in sync with the base_mem_alloc_flags flags
  */
 #define BASE_MEM_FLAGS_NR_BITS 19
 
-/**
-  * A mask for all output bits, excluding IN/OUT bits.
-  */
+/* A mask for all output bits, excluding IN/OUT bits.
+ */
 #define BASE_MEM_FLAGS_OUTPUT_MASK BASE_MEM_NEED_MMAP
 
-/**
-  * A mask for all input bits, including IN/OUT bits.
-  */
+/* A mask for all input bits, including IN/OUT bits.
+ */
 #define BASE_MEM_FLAGS_INPUT_MASK \
 	(((1 << BASE_MEM_FLAGS_NR_BITS) - 1) & ~BASE_MEM_FLAGS_OUTPUT_MASK)
 
-/**
- * A mask for all the flags which are modifiable via the base_mem_set_flags
+/* A mask for all the flags which are modifiable via the base_mem_set_flags
  * interface.
  */
 #define BASE_MEM_FLAGS_MODIFIABLE \
@@ -240,14 +236,14 @@ typedef enum base_mem_import_type {
 /**
  * struct base_mem_import_user_buffer - Handle of an imported user buffer
  *
- * @ptr:	kbase_pointer to imported user buffer
+ * @ptr:	address of imported user buffer
  * @length:	length of imported user buffer in bytes
  *
  * This structure is used to represent a handle of an imported user buffer.
  */
 
 struct base_mem_import_user_buffer {
-	kbase_pointer ptr;
+	u64 ptr;
 	u64 length;
 };
 
@@ -296,7 +292,6 @@ struct base_mem_import_user_buffer {
  */
 typedef enum base_backing_threshold_status {
 	BASE_BACKING_THRESHOLD_OK = 0,			    /**< Resize successful */
-	BASE_BACKING_THRESHOLD_ERROR_NOT_GROWABLE = -1,	    /**< Not a growable tmem object */
 	BASE_BACKING_THRESHOLD_ERROR_OOM = -2,		    /**< Increase failed due to an out-of-memory condition */
 	BASE_BACKING_THRESHOLD_ERROR_INVALID_ARGUMENTS = -4 /**< Invalid arguments (not tmem, illegal size request, etc.) */
 } base_backing_threshold_status;
@@ -828,7 +823,7 @@ struct base_dependency {
 typedef struct base_jd_atom_v2 {
 	u64 jc;			    /**< job-chain GPU address */
 	struct base_jd_udata udata;		    /**< user data */
-	kbase_pointer extres_list;	    /**< list of external resources */
+	u64 extres_list;	    /**< list of external resources */
 	u16 nr_extres;			    /**< nr of external resources */
 	u16 compat_core_req;	            /**< core requirements which correspond to the legacy support for UK 10.2 */
 	struct base_dependency pre_dep[2];  /**< pre-dependencies, one need to use SETTER function to assign this field,
@@ -839,21 +834,6 @@ typedef struct base_jd_atom_v2 {
 	u8 padding[1];
 	base_jd_core_req core_req;          /**< core requirements */
 } base_jd_atom_v2;
-
-#ifdef BASE_LEGACY_UK6_SUPPORT
-struct base_jd_atom_v2_uk6 {
-	u64 jc;			    /**< job-chain GPU address */
-	struct base_jd_udata udata;		    /**< user data */
-	kbase_pointer extres_list;	    /**< list of external resources */
-	u16 nr_extres;			    /**< nr of external resources */
-	u16 core_req;                       /**< core requirements */
-	base_atom_id pre_dep[2]; /**< pre-dependencies */
-	base_atom_id atom_number;	    /**< unique number to identify the atom */
-	base_jd_prio prio;		    /**< priority - smaller is higher priority */
-	u8 device_nr;			    /**< coregroup when BASE_JD_REQ_SPECIFIC_COHERENT_GROUP specified */
-	u8 padding[7];
-};
-#endif /* BASE_LEGACY_UK6_SUPPORT */
 
 typedef enum base_external_resource_access {
 	BASE_EXT_RES_ACCESS_SHARED,
@@ -1431,9 +1411,9 @@ struct mali_base_gpu_core_props {
 
 	/**
 	 * Status of the GPU release.
-     * No defined values, but starts at 0 and increases by one for each release
-     * status (alpha, beta, EAC, etc.).
-     * 4 bit values (0-15).
+	 * No defined values, but starts at 0 and increases by one for each
+	 * release status (alpha, beta, EAC, etc.).
+	 * 4 bit values (0-15).
 	 */
 	u16 version_status;
 
@@ -1452,8 +1432,11 @@ struct mali_base_gpu_core_props {
 	u16 padding;
 
 	/**
-	 * @usecase GPU clock speed is not specified in the Midgard Architecture, but is
-	 * <b>necessary for OpenCL's clGetDeviceInfo() function</b>.
+	 * This property is deprecated since it has not contained the real current
+	 * value of GPU clock speed. It is kept here only for backwards compatibility.
+	 * For the new ioctl interface, it is ignored and is treated as a padding
+	 * to keep the structure of the same size and retain the placement of its
+	 * members.
 	 */
 	u32 gpu_speed_mhz;
 
@@ -1461,6 +1444,7 @@ struct mali_base_gpu_core_props {
 	 * @usecase GPU clock max/min speed is required for computing best/worst case
 	 * in tasks as job scheduling ant irq_throttling. (It is not specified in the
 	 *  Midgard Architecture).
+	 * Also, GPU clock max speed is used for OpenCL's clGetDeviceInfo() function.
 	 */
 	u32 gpu_freq_khz_max;
 	u32 gpu_freq_khz_min;
