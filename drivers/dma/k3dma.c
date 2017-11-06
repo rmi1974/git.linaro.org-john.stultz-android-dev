@@ -53,7 +53,7 @@
 #define CX_DST			0x818
 #define CX_CFG			0x81c
 #define AXI_CFG			0x820
-#define AXI_CFG_DEFAULT		0x201201
+#define AXI_CFG_DEFAULT		0x040040
 
 #define CX_LLI_CHAIN_EN		0x2
 #define CX_CFG_EN		0x1
