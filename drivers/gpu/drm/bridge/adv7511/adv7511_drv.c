@@ -354,11 +354,6 @@ static void __adv7511_power_on(struct adv7511 *adv7511)
 	regmap_update_bits(adv7511->regmap, ADV7511_REG_POWER2,
 			   ADV7511_REG_POWER2_HPD_SRC_MASK,
 			   ADV7511_REG_POWER2_HPD_SRC_NONE);
-
-	/*
-	 * Most of the registers are reset during power down or when HPD is low.
-	 */
-	regcache_sync(adv7511->regmap);
 	msleep(200);
 }
 
@@ -368,6 +363,10 @@ static void adv7511_power_on(struct adv7511 *adv7511)
 	if (adv7511->type == ADV7533)
 		adv7533_dsi_power_on(adv7511);
 	adv7511->powered = true;
+	/*
+	 * Most of the registers are reset during power down or when HPD is low.
+	 */
+	regcache_sync(adv7511->regmap);
 }
 
 static void __adv7511_power_off(struct adv7511 *adv7511)
@@ -573,8 +572,16 @@ static int adv7511_get_modes(struct adv7511 *adv7511,
 	unsigned int count;
 
 	/* Reading the EDID only works if the device is powered */
-	if (!adv7511->powered)
+	if (!adv7511->powered) {
+		unsigned int edid_i2c_addr =
+					(adv7511->i2c_main->addr << 1) + 4;
+
 		__adv7511_power_on(adv7511);
+
+		/* Reset the EDID_I2C_ADDR register as it might be cleared */
+		regmap_write(adv7511->regmap, ADV7511_REG_EDID_I2C_ADDR,
+			     edid_i2c_addr);
+	}
 
 	edid = drm_do_get_edid(connector, adv7511_get_edid_block, adv7511);
 
