@@ -1095,7 +1095,6 @@ void hisi_fb_pan_display(struct drm_plane *plane)
 
 	u32 hfp, hbp, hsw, vfp, vbp, vsw;
 
-	DRM_INFO("+ .\n");
 	mode = &acrtc->base.state->mode;
 	adj_mode = &acrtc->base.state->adjusted_mode;
 
@@ -1141,7 +1140,6 @@ void hisi_fb_pan_display(struct drm_plane *plane)
 
 	enable_ldi(acrtc);
 	hisi_dss_wait_for_complete(ctx);
-	DRM_INFO("- .\n");
 }
 
 void hisi_dss_online_play(struct drm_plane *plane, drm_dss_layer_t *layer)
