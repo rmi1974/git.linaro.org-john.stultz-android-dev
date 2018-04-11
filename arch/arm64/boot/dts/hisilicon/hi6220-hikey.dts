@@ -26,6 +26,26 @@
 		stdout-path = "serial3:115200n8";
 	};
 
+	overlay_mgr {
+		compatible = "linux,overlay_manager";
+		hardware_cfg_enable_android_fstab {
+			overlay_0 {
+				fragment@0 {
+					target-path="/firmware/android/fstab/system";
+					__overlay__ {
+						status = "ok";
+					};
+				};
+				fragment@1 {
+					target-path="/firmware/android/fstab/vendor";
+					__overlay__ {
+						status = "ok";
+					};
+				};
+			};
+		};
+	};
+
 	/*
 	 * Reserve below regions from memory node:
 	 *
@@ -482,6 +502,7 @@
 					type = "ext4";
 					mnt_flags = "ro" ;
 					fsmgr_flags = "wait";
+					status = "disabled";
 				};
 				vendor {
 					compatible = "android,vendor";
@@ -489,6 +510,7 @@
 					type = "ext4";
 					mnt_flags = "ro" ;
 					fsmgr_flags = "wait";
+					status = "disabled";
 				};
 			};
 		};
