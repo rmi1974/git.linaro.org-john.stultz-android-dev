@@ -70,6 +70,7 @@ static void dwc2_set_his_params(struct dwc2_hsotg *hsotg)
 		GAHBCFG_HBSTLEN_SHIFT;
 	p->uframe_sched = false;
 	p->change_speed_quirk = true;
+	p->power_down = DWC2_POWER_DOWN_PARAM_NONE;
 }
 
 static void dwc2_set_rk_params(struct dwc2_hsotg *hsotg)
