@@ -254,12 +254,18 @@ static void dwc2_set_param_power_down(struct dwc2_hsotg *hsotg)
 {
 	int val;
 
-	if (hsotg->hw_params.hibernation)
-		val = 2;
-	else if (hsotg->hw_params.power_optimized)
-		val = 1;
-	else
-		val = 0;
+	if (!hsotg->params.power_saving) {
+		val = DWC2_POWER_DOWN_PARAM_NONE;
+		dev_dbg(hsotg->dev, "%s: Power saving is disabled.\n",
+			__func__);
+	} else {
+		if (hsotg->hw_params.hibernation)
+			val = DWC2_POWER_DOWN_PARAM_HIBERNATION;
+		else if (hsotg->hw_params.power_optimized)
+			val = DWC2_POWER_DOWN_PARAM_PARTIAL;
+		else
+			val = DWC2_POWER_DOWN_PARAM_NONE;
+	}
 
 	hsotg->params.power_down = val;
 }
@@ -281,6 +287,7 @@ static void dwc2_set_default_params(struct dwc2_hsotg *hsotg)
 	dwc2_set_param_phy_type(hsotg);
 	dwc2_set_param_speed(hsotg);
 	dwc2_set_param_phy_utmi_width(hsotg);
+	p->power_saving = true;
 	dwc2_set_param_power_down(hsotg);
 	p->phy_ulpi_ddr = false;
 	p->phy_ulpi_ext_vbus = false;

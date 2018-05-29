@@ -695,6 +695,7 @@ static int params_show(struct seq_file *seq, void *v)
 	print_param_hex(seq, p, ahbcfg);
 	print_param(seq, p, uframe_sched);
 	print_param(seq, p, external_id_pin_ctl);
+	print_param(seq, p, power_saving);
 	print_param(seq, p, power_down);
 	print_param(seq, p, lpm);
 	print_param(seq, p, lpm_clock_gating);
@@ -746,6 +747,7 @@ static int hw_params_show(struct seq_file *seq, void *v)
 	print_param(seq, hw, num_dev_perio_in_ep);
 	print_param(seq, hw, total_fifo_size);
 	print_param(seq, hw, power_optimized);
+	print_param(seq, hw, hibernation);
 	print_param(seq, hw, utmi_phy_data_width);
 	print_param_hex(seq, hw, snpsid);
 	print_param_hex(seq, hw, dev_ep_dirs);

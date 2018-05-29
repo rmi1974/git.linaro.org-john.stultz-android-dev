@@ -373,6 +373,8 @@ enum dwc2_ep0_state {
  *                      case.
  *                      0 - No (default)
  *                      1 - Yes
+ * @power_saving:	Specifies if power saving is enabled or not. If it is
+ *			enabled power_down functionality will be enabled.
  * @power_down:         Specifies whether the controller support power_down.
  *			If power_down is enabled, the controller will enter
  *			power_down in both peripheral and host mode when
@@ -469,6 +471,7 @@ struct dwc2_core_params {
 	bool uframe_sched;
 	bool external_id_pin_ctl;
 
+	unsigned int power_saving:1;
 	int power_down;
 #define DWC2_POWER_DOWN_PARAM_NONE		0
 #define DWC2_POWER_DOWN_PARAM_PARTIAL		1
