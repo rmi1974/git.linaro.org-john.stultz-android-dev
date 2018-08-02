@@ -25,6 +25,7 @@
 #include <linux/user_namespace.h>
 #include <linux/memfd.h>
 #include <linux/compat.h>
+#include <linux/shmem_fs.h>
 
 #include <linux/poll.h>
 #include <asm/siginfo.h>
@@ -426,6 +427,9 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 	case F_SET_FILE_RW_HINT:
 		err = fcntl_rw_hint(filp, cmd, arg);
 		break;
+	case F_VRANGE_PIN:
+	case F_VRANGE_UNPIN:
+		err = volatile_range_fcntl(filp, cmd, arg);
 	default:
 		break;
 	}

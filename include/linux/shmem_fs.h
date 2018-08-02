@@ -19,6 +19,7 @@ struct shmem_inode_info {
 	unsigned long		swapped;	/* subtotal assigned to swap */
 	struct list_head        shrinklist;     /* shrinkable hpage inodes */
 	struct list_head	swaplist;	/* chain of maybes on swap */
+	struct list_head	volatile_list;	/* volatile ranges */
 	struct shared_policy	policy;		/* NUMA memory alloc policy */
 	struct simple_xattrs	xattrs;		/* list of xattrs */
 	struct inode		vfs_inode;
@@ -118,6 +119,10 @@ static inline bool shmem_huge_enabled(struct vm_area_struct *vma)
 	return false;
 }
 #endif
+
+
+int volatile_range_release(struct inode *ignored, struct file *file);
+long volatile_range_fcntl(struct file *file, unsigned int cmd, unsigned long arg);
 
 #ifdef CONFIG_SHMEM
 extern int shmem_mcopy_atomic_pte(struct mm_struct *dst_mm, pmd_t *dst_pmd,

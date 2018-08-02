@@ -218,4 +218,10 @@ struct flock64 {
 };
 #endif
 
+struct f_vrange_pin {
+	__kernel_loff_t l_offset;
+	__kernel_loff_t l_len;
+};
+
+
 #endif /* _ASM_GENERIC_FCNTL_H */

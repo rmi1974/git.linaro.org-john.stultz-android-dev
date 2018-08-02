@@ -65,6 +65,12 @@
 #define RWH_WRITE_LIFE_EXTREME	5
 
 /*
+ * PIN/UNPIN
+ */
+#define F_VRANGE_PIN		(F_LINUX_SPECIFIC_BASE + 15)
+#define F_VRANGE_UNPIN		(F_LINUX_SPECIFIC_BASE + 16)
+
+/*
  * Types of directory notifications that may be requested.
  */
 #define DN_ACCESS	0x00000001	/* File accessed */

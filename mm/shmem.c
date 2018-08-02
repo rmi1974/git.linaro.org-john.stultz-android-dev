@@ -2172,6 +2172,13 @@ static int shmem_mmap(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 
+
+static int shmem_file_release(struct inode *inode, struct file *file)
+{
+	return volatile_range_release(inode,file);
+}
+
+
 static struct inode *shmem_get_inode(struct super_block *sb, const struct inode *dir,
 				     umode_t mode, dev_t dev, unsigned long flags)
 {
@@ -2196,6 +2203,7 @@ static struct inode *shmem_get_inode(struct super_block *sb, const struct inode 
 		info->flags = flags & VM_NORESERVE;
 		INIT_LIST_HEAD(&info->shrinklist);
 		INIT_LIST_HEAD(&info->swaplist);
+		INIT_LIST_HEAD(&info->volatile_list);
 		simple_xattrs_init(&info->xattrs);
 		cache_no_acl(inode);
 
@@ -3611,6 +3619,7 @@ static const struct address_space_operations shmem_aops = {
 static const struct file_operations shmem_file_operations = {
 	.mmap		= shmem_mmap,
 	.get_unmapped_area = shmem_get_unmapped_area,
+	.release	= shmem_file_release,
 #ifdef CONFIG_TMPFS
 	.llseek		= shmem_file_llseek,
 	.read_iter	= shmem_file_read_iter,
