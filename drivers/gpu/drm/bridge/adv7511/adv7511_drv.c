@@ -666,7 +666,6 @@ static int adv7511_mode_valid(struct adv7511 *adv7511,
 	DRM_DEBUG("Checking mode %ix%i@%i clock: %i...",
 		  mode->hdisplay, mode->vdisplay, drm_mode_vrefresh(mode), mode->clock);
 	if ((mode->hdisplay == 1920 && mode->vdisplay == 1080 && mode->clock == 148500) ||
-	    (mode->hdisplay == 1920 && mode->vdisplay == 1080 && mode->clock == 148352) ||
 	    (mode->hdisplay == 1920 && mode->vdisplay == 1080 && mode->clock == 80192)  ||
 	    (mode->hdisplay == 1920 && mode->vdisplay == 1080 && mode->clock == 74250)  ||
 	    (mode->hdisplay == 1920 && mode->vdisplay == 1080 && mode->clock == 61855)  ||
