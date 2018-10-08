@@ -183,38 +183,6 @@ static void ion_buffer_kmap_put(struct ion_buffer *buffer)
 	}
 }
 
-static struct sg_table *dup_sg_table(struct sg_table *table)
-{
-	struct sg_table *new_table;
-	int ret, i;
-	struct scatterlist *sg, *new_sg;
-
-	new_table = kzalloc(sizeof(*new_table), GFP_KERNEL);
-	if (!new_table)
-		return ERR_PTR(-ENOMEM);
-
-	ret = sg_alloc_table(new_table, table->nents, GFP_KERNEL);
-	if (ret) {
-		kfree(new_table);
-		return ERR_PTR(-ENOMEM);
-	}
-
-	new_sg = new_table->sgl;
-	for_each_sg(table->sgl, sg, table->nents, i) {
-		memcpy(new_sg, sg, sizeof(*sg));
-		sg->dma_address = 0;
-		new_sg = sg_next(new_sg);
-	}
-
-	return new_table;
-}
-
-static void free_duped_table(struct sg_table *table)
-{
-	sg_free_table(table);
-	kfree(table);
-}
-
 struct ion_dma_buf_attachment {
 	struct device *dev;
 	struct sg_table *table;
@@ -233,7 +201,7 @@ static int ion_dma_buf_attach(struct dma_buf *dmabuf, struct device *dev,
 	if (!a)
 		return -ENOMEM;
 
-	table = dup_sg_table(buffer->sg_table);
+	table = buffer->sg_table;
 	if (IS_ERR(table)) {
 		kfree(a);
 		return -ENOMEM;
@@ -263,16 +231,14 @@ static void ion_dma_buf_detatch(struct dma_buf *dmabuf,
 	if (!a)
 		return;
 
-
 	table = a->table;
 	if (table) {
 		if (a->dir != DMA_NONE)
 			dma_unmap_sg(attachment->dev, table->sgl, table->nents,
                                         a->dir);
-		sg_free_table(table);
+		a->table = NULL;
 	}
 
-	free_duped_table(a->table);
 	mutex_lock(&buffer->lock);
 	list_del(&a->list);
 	mutex_unlock(&buffer->lock);
