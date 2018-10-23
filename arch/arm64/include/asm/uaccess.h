@@ -32,6 +32,7 @@
 #include <asm/cpufeature.h>
 #include <asm/ptrace.h>
 #include <asm/memory.h>
+#include <asm/compiler.h>
 #include <asm/extable.h>
 
 #define get_ds()	(KERNEL_DS)
