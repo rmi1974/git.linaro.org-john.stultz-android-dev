@@ -1694,9 +1694,9 @@ static int kbase_cpu_vm_fault(struct vm_fault *vmf)
 	addr = (pgoff_t)(vmf->address >> PAGE_SHIFT);
 #endif
 	while (i < map->alloc->nents && (addr < vma->vm_end >> PAGE_SHIFT)) {
-		int ret = vm_insert_pfn(vma, addr << PAGE_SHIFT,
+		int ret = vmf_insert_pfn(vma, addr << PAGE_SHIFT,
 		    PFN_DOWN(as_phys_addr_t(map->alloc->pages[i])));
-		if (ret < 0 && ret != -EBUSY)
+		if (ret != VM_FAULT_NOPAGE)
 			goto locked_bad_fault;
 
 		i++; addr++;
@@ -1777,9 +1777,11 @@ static int kbase_cpu_mmap(struct kbase_va_region *reg, struct vm_area_struct *vm
 			phys_addr_t phys;
 
 			phys = as_phys_addr_t(page_array[i + start_off]);
-			err = vm_insert_pfn(vma, addr, PFN_DOWN(phys));
-			if (WARN_ON(err))
+			err = vmf_insert_pfn(vma, addr, PFN_DOWN(phys));
+			if (WARN_ON(err != VM_FAULT_NOPAGE)) {
+				err = -EFAULT;
 				break;
+			}
 
 			addr += PAGE_SIZE;
 		}
