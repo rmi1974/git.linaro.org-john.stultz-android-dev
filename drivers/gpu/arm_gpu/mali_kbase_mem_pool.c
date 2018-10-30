@@ -198,7 +198,7 @@ struct page *kbase_mem_alloc_page(struct kbase_mem_pool *pool)
 		return NULL;
 	}
 
-	WARN_ON(dma_addr != page_to_phys(p));
+	//WARN_ON(dma_addr != page_to_phys(p));
 	for (i = 0; i < (1u << pool->order); i++)
 		kbase_set_dma_addr(p+i, dma_addr + PAGE_SIZE * i);
 
