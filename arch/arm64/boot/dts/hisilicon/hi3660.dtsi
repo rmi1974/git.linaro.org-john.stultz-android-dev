@@ -685,16 +685,19 @@
 		};
 
 		dma0: dma@fdf30000 {
-			compatible = "hisilicon,k3-dma-1.0";
+			compatible = "hisilicon,hisi-dma-1.0";
+//			compatible = "hisilicon,k3-dma-1.0";
 			reg = <0x0 0xfdf30000 0x0 0x1000>;
 			#dma-cells = <1>;
 			dma-channels = <16>;
 			dma-requests = <32>;
 			dma-min-chan = <1>;
-			interrupts = <GIC_SPI 143 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&crg_ctrl HI3660_CLK_GATE_DMAC>;
-			dma-no-cci;
-			dma-type = "hi3660_dma";
+			dma-used-chans = <0xFFFE>;
+			dma-share;
+			interrupts = <0 143 4>;
+			clocks = <&crg_ctrl HI3660_CLK_GATE_DMAC>,
+				 <&crg_ctrl HI3660_PCLK>;
+			clock-names = "clk_dmac", "apb_pclk";
 		};
 
 		rtc0: rtc@fff04000 {
