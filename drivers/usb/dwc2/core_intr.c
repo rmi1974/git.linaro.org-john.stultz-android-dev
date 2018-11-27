@@ -312,6 +312,8 @@ static void dwc2_handle_conn_id_status_change_intr(struct dwc2_hsotg *hsotg)
 static void dwc2_handle_session_req_intr(struct dwc2_hsotg *hsotg)
 {
 	int ret;
+	u32 gpwrdn;
+	u32 gpwrdn_tmp;
 
 	/* Clear interrupt */
 	dwc2_writel(hsotg, GINTSTS_SESSREQINT, GINTSTS);
@@ -320,6 +322,68 @@ static void dwc2_handle_session_req_intr(struct dwc2_hsotg *hsotg)
 		hsotg->lx_state);
 
 	if (dwc2_is_device_mode(hsotg)) {
+		if ((hsotg->lx_state == DWC2_L0 ||
+		     hsotg->lx_state == DWC2_L2) &&
+		     hsotg->params.power_down == 2) {
+			gpwrdn = dwc2_readl(hsotg, GPWRDN);
+
+			/* Switch-on voltage to the core */
+			gpwrdn_tmp = dwc2_readl(hsotg, GPWRDN);
+			gpwrdn_tmp &= ~GPWRDN_PWRDNSWTCH;
+			dwc2_writel(hsotg, gpwrdn_tmp, GPWRDN);
+			udelay(10);
+
+			/* Reset core */
+			gpwrdn_tmp = dwc2_readl(hsotg, GPWRDN);
+			gpwrdn_tmp &= ~GPWRDN_PWRDNRSTN;
+			dwc2_writel(hsotg, gpwrdn_tmp, GPWRDN);
+			udelay(10);
+
+			/* Disable Power Down Clamp */
+			gpwrdn_tmp = dwc2_readl(hsotg, GPWRDN);
+			gpwrdn_tmp &= ~GPWRDN_PWRDNCLMP;
+			dwc2_writel(hsotg, gpwrdn_tmp, GPWRDN);
+			udelay(10);
+
+			/* Deassert reset core */
+			gpwrdn_tmp = dwc2_readl(hsotg, GPWRDN);
+			gpwrdn_tmp |= GPWRDN_PWRDNRSTN;
+			dwc2_writel(hsotg, gpwrdn_tmp, GPWRDN);
+			udelay(10);
+
+			/* Disable PMU interrupt */
+			gpwrdn_tmp = dwc2_readl(hsotg, GPWRDN);
+			gpwrdn_tmp &= ~GPWRDN_PMUINTSEL;
+			dwc2_writel(hsotg, gpwrdn_tmp, GPWRDN);
+
+			/* De-assert Wakeup Logic */
+			gpwrdn_tmp = dwc2_readl(hsotg, GPWRDN);
+			gpwrdn_tmp &= ~GPWRDN_PMUACTV;
+			dwc2_writel(hsotg, gpwrdn_tmp, GPWRDN);
+
+			/* GPWRDN.VbusOff = 0. */
+			gpwrdn_tmp = dwc2_readl(hsotg, GPWRDN);
+			gpwrdn_tmp &= ~GPWRDN_DIS_VBUS;
+			dwc2_writel(hsotg, gpwrdn_tmp, GPWRDN);
+
+			hsotg->hibernated = 0;
+
+			if (gpwrdn & GPWRDN_IDSTS) {
+				hsotg->op_state = OTG_STATE_B_PERIPHERAL;
+				dwc2_core_init(hsotg, false);
+				dwc2_enable_global_interrupts(hsotg);
+				dwc2_hsotg_core_init_disconnected(hsotg, false);
+				dwc2_hsotg_core_connect(hsotg);
+			} else {
+				hsotg->op_state = OTG_STATE_A_HOST;
+
+				/* Initialize the Core for Host mode */
+				dwc2_core_init(hsotg, false);
+				dwc2_enable_global_interrupts(hsotg);
+				dwc2_hcd_start(hsotg);
+			}
+		}
+
 		if (hsotg->lx_state == DWC2_L2) {
 			ret = dwc2_exit_partial_power_down(hsotg, true);
 			if (ret && (ret != -ENOTSUPP))
