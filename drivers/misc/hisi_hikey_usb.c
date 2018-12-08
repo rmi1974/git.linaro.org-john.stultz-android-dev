@@ -124,7 +124,7 @@ static int extcon_hisi_pd_set_role(struct device *dev, enum usb_role role)
 	case USB_ROLE_DEVICE:
 		hub_power_ctrl(hisi_hikey_usb, HUB_VBUS_POWER_OFF);
 		usb_typec_power_ctrl(hisi_hikey_usb,
-				hisi_hikey_usb->typec_vbus_enable_val);
+				!hisi_hikey_usb->typec_vbus_enable_val);
 		usb_switch_ctrl(hisi_hikey_usb, USB_SWITCH_TO_TYPEC);
 		extcon_set_state_sync(hisi_hikey_usb->edev, EXTCON_USB_HOST,
 				false);
