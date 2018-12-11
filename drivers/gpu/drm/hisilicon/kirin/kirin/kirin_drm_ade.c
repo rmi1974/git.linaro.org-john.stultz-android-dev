@@ -986,7 +986,7 @@ static int ade_dts_parse(struct platform_device *pdev, struct ade_hw_ctx *ctx)
 	return 0;
 }
 
-static int ade_drm_init(struct platform_device *pdev)
+int ade_drm_init(struct platform_device *pdev)
 {
 	struct drm_device *dev = platform_get_drvdata(pdev);
 	struct ade_data *ade;
@@ -1044,11 +1044,15 @@ static int ade_drm_init(struct platform_device *pdev)
 	return 0;
 }
 
-static void ade_drm_cleanup(struct platform_device *pdev)
+void ade_drm_cleanup(struct platform_device *pdev)
 {
 }
 
-const struct kirin_dc_ops ade_dc_ops = {
-	.init = ade_drm_init,
-	.cleanup = ade_drm_cleanup
-};
+void kirin_drm_mode_config_init_size(struct drm_device *dev)
+{
+	dev->mode_config.min_width = 0;
+	dev->mode_config.min_height = 0;
+	dev->mode_config.max_width = 2048;
+	dev->mode_config.max_height = 2048;
+
+}
