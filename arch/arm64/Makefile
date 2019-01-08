@@ -120,7 +120,7 @@ endif
 
 KBUILD_DTBS	:= dtbs
 
-all:	Image.gz $(KBUILD_DTBS)
+all: $(notdir $(KBUILD_IMAGE)) $(KBUILD_DTBS)
 
 
 Image: vmlinux
