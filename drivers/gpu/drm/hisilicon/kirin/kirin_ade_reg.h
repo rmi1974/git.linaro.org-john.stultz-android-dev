@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
- * Copyright (c) 2016 Linaro Limited.
- * Copyright (c) 2014-2016 Hisilicon Limited.
+ * Copyright (c) 2019 Linaro Limited.
+ * Copyright (c) 2014-2019 Hisilicon Limited.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
