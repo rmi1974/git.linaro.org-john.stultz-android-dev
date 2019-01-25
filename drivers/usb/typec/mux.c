@@ -11,6 +11,8 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/property.h>
+#include <linux/slab.h>
 #include <linux/usb/typec_mux.h>
 
 static DEFINE_MUTEX(switch_lock);
@@ -23,15 +25,22 @@ static void *typec_switch_match(struct device_connection *con, int ep,
 {
 	struct typec_switch *sw;
 
+	if (!con->fwnode) {
+		list_for_each_entry(sw, &switch_list, entry)
+			if (!strcmp(con->endpoint[ep], dev_name(sw->dev)))
+				return sw;
+		return ERR_PTR(-EPROBE_DEFER);
+	}
+
+	if (con->id &&
+	    !fwnode_property_present(con->fwnode, "orientation-switch"))
+		return NULL;
+
 	list_for_each_entry(sw, &switch_list, entry)
-		if (!strcmp(con->endpoint[ep], dev_name(sw->dev)))
+		if (dev_fwnode(sw->dev) == con->fwnode)
 			return sw;
 
-	/*
-	 * We only get called if a connection was found, tell the caller to
-	 * wait for the switch to show up.
-	 */
-	return ERR_PTR(-EPROBE_DEFER);
+	return con->id ? ERR_PTR(-EPROBE_DEFER) : NULL;
 }
 
 /**
@@ -112,17 +121,62 @@ EXPORT_SYMBOL_GPL(typec_switch_unregister);
 
 static void *typec_mux_match(struct device_connection *con, int ep, void *data)
 {
+	const struct typec_altmode_desc *desc = data;
 	struct typec_mux *mux;
+	bool match = !con->id;
+	size_t nval;
+	u16 *val;
+	int i;
 
+	if (!con->fwnode) {
+		list_for_each_entry(mux, &mux_list, entry)
+			if (!strcmp(con->endpoint[ep], dev_name(mux->dev)))
+				return mux;
+		return ERR_PTR(-EPROBE_DEFER);
+	}
+
+	if (match)
+		goto find_mux;
+
+	/* Accessory Mode muxes */
+	if (!desc) {
+		match = fwnode_property_present(con->fwnode, "accessory");
+		if (match)
+			goto find_mux;
+		return NULL;
+	}
+
+	/* Alternate Mode muxes */
+	nval = fwnode_property_read_u16_array(con->fwnode, "svid", NULL, 0);
+	if (nval <= 0)
+		return NULL;
+
+	val = kcalloc(nval, sizeof(*val), GFP_KERNEL);
+	if (!val)
+		return ERR_PTR(-ENOMEM);
+
+	nval = fwnode_property_read_u16_array(con->fwnode, "svid", val, nval);
+	if (nval < 0) {
+		kfree(val);
+		return ERR_PTR(nval);
+	}
+
+	for (i = 0; i < nval; i++) {
+		match = val[i] == desc->svid;
+		if (match) {
+			kfree(val);
+			goto find_mux;
+		}
+	}
+	kfree(val);
+	return NULL;
+
+find_mux:
 	list_for_each_entry(mux, &mux_list, entry)
-		if (!strcmp(con->endpoint[ep], dev_name(mux->dev)))
+		if (dev_fwnode(mux->dev) == con->fwnode)
 			return mux;
 
-	/*
-	 * We only get called if a connection was found, tell the caller to
-	 * wait for the switch to show up.
-	 */
-	return ERR_PTR(-EPROBE_DEFER);
+	return match ? ERR_PTR(-EPROBE_DEFER) : NULL;
 }
 
 /**
