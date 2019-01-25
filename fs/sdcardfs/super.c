@@ -17,7 +17,7 @@
  * under the terms of the Apache 2.0 License OR version 2 of the GNU
  * General Public License.
  */
-
+#include <uapi/linux/mount.h>
 #include "sdcardfs.h"
 
 /*
