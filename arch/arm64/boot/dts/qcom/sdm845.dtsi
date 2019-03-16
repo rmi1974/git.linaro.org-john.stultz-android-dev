@@ -330,7 +330,7 @@
 		};
 	};
 
-	firmware {
+	firmware: firmware {
 		scm {
 			compatible = "qcom,scm-sdm845", "qcom,scm";
 		};

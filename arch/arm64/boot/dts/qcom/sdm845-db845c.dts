@@ -759,3 +759,26 @@
 		bias-pull-up;
 	};
 };
+
+&firmware {
+	android {
+		compatible = "android,firmware";
+		fstab {
+			compatible = "android,fstab";
+			system {
+				compatible = "android,system";
+				dev = "/dev/block/platform/soc/1d84000.ufshc/by-name/system_a";
+				type = "ext4";
+				mnt_flags = "ro" ;
+				fsmgr_flags = "wait";
+			};
+			vendor {
+				compatible = "android,vendor";
+				dev = "/dev/block/platform/soc/1d84000.ufshc/by-name/system_b";
+				type = "ext4";
+				mnt_flags = "ro" ;
+				fsmgr_flags = "wait";
+			};
+		};
+	};
+};
