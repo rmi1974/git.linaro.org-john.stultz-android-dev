@@ -9,6 +9,7 @@
  * License.  See the file COPYING in the main directory of the Linux
  * distribution for more details.
  */
+#include <uapi/linux/mount.h>
 #include "sdcardfs.h"
 
 /* could be triggered after deactivate_locked_super()

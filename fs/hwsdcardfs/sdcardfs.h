@@ -32,6 +32,8 @@
 #include <linux/list.h>
 #include <linux/fs_struct.h>
 #include <linux/ratelimit.h>
+#include <linux/sched/task.h>
+#include <linux/iversion.h>
 #ifdef SDCARDFS_SYSFS_FEATURE
 #include <linux/kobject.h>
 #endif
@@ -422,7 +424,7 @@ static inline int need_fixup_permission(
 	struct inode *dir,
 	struct sdcardfs_tree_entry *te
 ) {
-	return te->revision < dir->i_version;
+	return te->revision < atomic64_read(&dir->i_version);
 }
 
 static inline void __fix_derived_permission(
@@ -471,7 +473,7 @@ static inline void __fix_derived_permission(
 	filtered_mode = visible_mode & (owner_mode | (owner_mode >> 3) | (owner_mode >> 6));
 	inode->i_mode = (inode->i_mode & S_IFMT) | filtered_mode;
 
-	inode->i_version = te->revision;
+	inode_set_iversion(inode, te->revision);
 #endif
 }
 

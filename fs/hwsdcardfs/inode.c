@@ -223,7 +223,7 @@ struct dentry *__lookup_rename_ci(
 static int sdcardfs_rename(
 	struct inode *old_dir,
 	struct dentry *old_dentry,
-	struct inode *new_dir, struct dentry *new_dentry
+	struct inode *new_dir, struct dentry *new_dentry, unsigned int flags
 ) {
 	int err;
 	struct dentry *trap, *dentry;
@@ -231,6 +231,9 @@ static int sdcardfs_rename(
 	struct dentry *real_old_dentry, *real_new_dentry;
 	const struct cred *saved_cred;
 	bool overlapped = true;
+
+	if (flags)
+		return -EINVAL;
 
 	trace_sdcardfs_rename_enter(old_dir, old_dentry, new_dir, new_dentry);
 
@@ -339,6 +342,7 @@ static int sdcardfs_setattr(struct dentry *dentry, struct iattr *ia)
 {
 	int err;
 	struct iattr copied_ia;
+	struct dentry tmp;
 	struct inode *inode = d_inode(dentry);
 
 	/* since sdcardfs uses its own uid/gid derived policy,
@@ -363,7 +367,8 @@ static int sdcardfs_setattr(struct dentry *dentry, struct iattr *ia)
 	if (ia->ia_valid & ATTR_MODE)
 		ia->ia_valid &= ~ATTR_MODE;
 
-	err = inode_change_ok(inode, ia);
+	tmp.d_inode = inode;
+	err = setattr_prepare(&tmp, ia);
 	if (!err) {
 		struct dentry *lower_dentry;
 
@@ -406,12 +411,14 @@ out:
 	return err;
 }
 
-static int sdcardfs_getattr(struct vfsmount *mnt, struct dentry *dentry,
-		 struct kstat *stat)
+static int sdcardfs_getattr(const struct path *path, struct kstat *stat,
+		 u32 request_mask, unsigned int query_flags)
 {
 	int err;
 	struct path lower_path;
 	const struct cred *saved_cred;
+	struct vfsmount *mnt = path->mnt;
+	struct dentry *dentry = path->dentry;
 
 	debugln("%s, dentry=%p, name=%s", __FUNCTION__,
 		dentry, dentry->d_name.name);
@@ -429,7 +436,7 @@ static int sdcardfs_getattr(struct vfsmount *mnt, struct dentry *dentry,
 		goto out_pathput;
 	}
 
-	err = vfs_getattr(&lower_path, stat);
+	err = vfs_getattr(&lower_path, stat, request_mask, query_flags);
 	REVERT_CRED(saved_cred);
 
 	if (!err) {
@@ -439,7 +446,7 @@ static int sdcardfs_getattr(struct vfsmount *mnt, struct dentry *dentry,
 		/* note that generic_fillattr dont take any lock */
 		stat->nlink = S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink;
 
-		if (te->revision > inode->i_version) {
+		if (te->revision > atomic64_read(&inode->i_version)) {
 			inode_lock(inode);
 			__fix_derived_permission(te, inode);
 			inode_unlock(inode);
@@ -464,7 +471,7 @@ static int sdcardfs_permission(struct inode *inode, int mask)
 #endif
 	struct sdcardfs_tree_entry *te = inode->i_private;
 
-	need_reval = te->revision > inode->i_version;
+	need_reval = te->revision > atomic64_read(&inode->i_version);
 
 	if (need_reval) {
 		if (mask & MAY_NOT_BLOCK)
@@ -501,10 +508,7 @@ const struct inode_operations sdcardfs_dir_iops = {
 	.setattr    = sdcardfs_setattr,
 	.getattr    = sdcardfs_getattr,
 
-	.setxattr = sdcardfs_setxattr,
-	.getxattr = sdcardfs_getxattr,
 	.listxattr = sdcardfs_listxattr,
-	.removexattr = sdcardfs_removexattr,
 };
 
 const struct inode_operations sdcardfs_main_iops = {
@@ -512,8 +516,5 @@ const struct inode_operations sdcardfs_main_iops = {
 	.setattr    = sdcardfs_setattr,
 	.getattr    = sdcardfs_getattr,
 
-	.setxattr = sdcardfs_setxattr,
-	.getxattr = sdcardfs_getxattr,
 	.listxattr = sdcardfs_listxattr,
-	.removexattr = sdcardfs_removexattr,
 };

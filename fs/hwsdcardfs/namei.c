@@ -30,7 +30,7 @@ struct inode *sdcardfs_ialloc(
 		return ERR_PTR(-ENOMEM);
 
 	inode->i_ino = get_next_ino();
-	inode->i_version = 1;
+	inode_set_iversion(inode, 1);
 	inode->i_generation = get_seconds();
 
 	BUG_ON(__is_weird_inode(mode));

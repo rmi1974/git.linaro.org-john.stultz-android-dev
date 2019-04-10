@@ -174,7 +174,7 @@ static int __sdcardfs_setup_root(
 
 	/* if inode->i_version < te->revision,
 	   uid/gid/mode will be updated at the right time */
-	inode->i_version = te->revision;
+	inode_set_iversion(inode, te->revision);
 
 	/* used for revalidate in inode_permission */
 	inode->i_private = te;

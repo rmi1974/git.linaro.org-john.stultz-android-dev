@@ -5,18 +5,6 @@
 #define d_inode(x)  ((x)->d_inode)
 #endif
 
-#ifndef inode_lock_nested
-#define inode_lock_nested(x, y) mutex_lock_nested(&(x)->i_mutex, (y))
-#endif
-
-#ifndef inode_lock
-#define inode_lock(x) mutex_lock(&(x)->i_mutex)
-#endif
-
-#ifndef inode_unlock
-#define inode_unlock(x) mutex_unlock(&(x)->i_mutex)
-#endif
-
 #ifndef lockless_dereference
 /**
  * lockless_dereference() - safely load a pointer for later dereference
