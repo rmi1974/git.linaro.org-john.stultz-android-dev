@@ -1,4 +1,4 @@
-/* vim:set ts=8 sw=8 tw=0 noet ft=c:
+/* vim:set ts=4 sw=4 tw=0 noet ft=c:
  *
  * fs/sdcardfs/main.c
  *
@@ -28,7 +28,6 @@ enum {
 	Opt_fs_scontext,
 	Opt_reserved_mb,
 	Opt_quiet,
-	Opt_gid_derivation,
 	Opt_err,
 };
 
@@ -43,19 +42,14 @@ static const match_table_t sdcardfs_tokens = {
 	{Opt_fs_scontext, "fs_scontext=%s"},
 	{Opt_reserved_mb, "reserved_mb=%u"},
 	{Opt_quiet, "quiet"},
-	{Opt_gid_derivation, "derive_gid"}, /* for OC-MR1 compatibility only */
 	{Opt_err, NULL}
 };
 
 static void default_options(struct sdcardfs_mount_options *opts)
 {
-	/*
-	 * always use AID_MEDIA_RW as underlayfs uid, gid by default
-	 * and it is dangerous to modify at runtime
-	 */
+	/* by default, we use AID_MEDIA_RW as uid, gid */
 	opts->fs_low_uid = AID_MEDIA_RW;
 	opts->fs_low_gid = AID_MEDIA_RW;
-
 	opts->mask = 0;
 	opts->multiuser = false;
 	opts->fs_user_id = 0;
@@ -64,9 +58,6 @@ static void default_options(struct sdcardfs_mount_options *opts)
 	/* by default, 0MB is reserved */
 	opts->reserved_mb = 0;
 	opts->quiet = false;
-
-	/* too buggy, therefore we never use gid derivation */
-	/* opts->gid_derivation = false; */
 }
 
 int sdcardfs_parse_options(struct sdcardfs_mount_options *opts,
@@ -122,7 +113,7 @@ int sdcardfs_parse_options(struct sdcardfs_mount_options *opts,
 			if (string_option == NULL)
 				return -ENOMEM;
 
-			if (!strcmp(string_option, "current")) {
+			if (!strcmp(string_option, "current")) {	/*lint !e421*/
 				security_task_getsecid(current,
 					&opts->fs_low_secid);
 				option = 0;
@@ -147,9 +138,6 @@ int sdcardfs_parse_options(struct sdcardfs_mount_options *opts,
 		case Opt_quiet:
 			opts->quiet = true;
 			break;
-		case Opt_gid_derivation:
-			/* dummy */
-			break;
 		default:	/* unknown option */
 			if (!silent)
 				errln("Unrecognized mount option \"%s\" "
@@ -164,13 +152,16 @@ static int __sdcardfs_setup_root(
 	struct dentry *root,
 	struct dentry *realdir,
 	userid_t userid,
-	int multiuser)
-{
-	struct sdcardfs_tree_entry *te = SDCARDFS_D(root);
+	int multiuser
+) {
+	struct sdcardfs_tree_entry *te;
 	struct inode *inode;
 
 	/* link the upper and lower dentries */
-	sdcardfs_init_tree_entry(te, realdir);
+	te = sdcardfs_init_tree_entry(root, realdir);
+	if (te == NULL)
+		return -ENOMEM;
+
 	te->revision = get_next_revision(root);
 
 	/* setup permission policy */
@@ -181,37 +172,35 @@ static int __sdcardfs_setup_root(
 
 	inode = d_inode(root);
 
-	/*
-	 * if inode->i_version < te->revision,
-	 * uid/gid/mode will be updated at the right time
-	 */
+	/* if inode->i_version < te->revision,
+	   uid/gid/mode will be updated at the right time */
 	inode->i_version = te->revision;
+
+	/* used for revalidate in inode_permission */
+	inode->i_private = te;
 
 	__fix_derived_permission(te, inode);
 	return 0;
 }
 
-static struct dentry *make_dir(
+static inline
+struct dentry *__prepare_dir(
 	const char *path_s,
 	mode_t mode, uid_t uid, gid_t gid)
 {
 	struct path parent;
-
 	struct dentry *dent = kern_path_create(AT_FDCWD,
 		path_s, &parent, LOOKUP_DIRECTORY);
-
 	if (IS_ERR(dent)) {
 		if (dent == ERR_PTR(-EEXIST))
 			dent = NULL;
 	} else {
 		int err = vfs_mkdir(d_inode(parent.dentry), dent, mode);
-
 		if (err) {
 			done_path_create(&parent, dent);
 			dent = ERR_PTR(err);
 		} else {
 			struct iattr attrs = {.ia_valid = ATTR_UID | ATTR_GID};
-
 			attrs.ia_uid = make_kuid(&init_user_ns, uid);
 			attrs.ia_gid = make_kgid(&init_user_ns, gid);
 
@@ -223,16 +212,16 @@ static struct dentry *make_dir(
 			done_path_create(&parent, dent);
 		}
 	}
-
 	return dent;
 }
 
-static struct dentry *prepare_dir(
+static
+struct dentry *prepare_dir(
 	const char *path_s,
 	mode_t mode, uid_t uid, gid_t gid)
 {
-	struct dentry *dir = make_dir(path_s, mode, uid, gid);
-
+	struct dentry *dir =
+		__prepare_dir(path_s, mode, uid, gid);
 	if (dir == NULL) {
 		struct path path;
 		int err = kern_path(path_s, LOOKUP_DIRECTORY, &path);
@@ -251,10 +240,9 @@ static struct dentry *prepare_dir(
 	return dir;
 }
 
-/*
- * there is no way that anyone can have a reference to
- * the superblock at this point in time.
- */
+/*lint -save -e578*/
+/* There is no need to lock the sdcardfs_super_info's rwsem as there is no
+   way anyone can have a reference to the superblock at this point in time. */
 static int sdcardfs_read_super(struct super_block *sb,
 	const char *dev_name, void *raw_data, int silent)
 {
@@ -269,7 +257,7 @@ static int sdcardfs_read_super(struct super_block *sb,
 	sb->s_magic = SDCARDFS_SUPER_MAGIC;
 
 	if (dev_name == NULL) {
-		errln("%s, missing dev_name argument", __func__);
+		errln("%s, missing dev_name argument", __FUNCTION__);
 		err = -EINVAL;
 		goto out;
 	}
@@ -281,14 +269,14 @@ static int sdcardfs_read_super(struct super_block *sb,
 	err = kern_path(dev_name, LOOKUP_FOLLOW | LOOKUP_DIRECTORY,
 			&lower_path);
 	if (err) {
-		errln("%s, error accessing device '%s'", __func__, dev_name);
+		errln("%s, error accessing device '%s'", __FUNCTION__, dev_name);
 		goto out;
 	}
 
 	lower_inode = d_inode(lower_path.dentry);
 	if (!S_ISDIR(lower_inode->i_mode)) {
 		errln("%s, device '%s' should be a directory",
-			__func__, dev_name);
+			__FUNCTION__, dev_name);
 		err = -EINVAL;
 		goto out_free;
 	}
@@ -296,7 +284,7 @@ static int sdcardfs_read_super(struct super_block *sb,
 	/* allocate superblock private data */
 	sbi = kzalloc(sizeof(struct sdcardfs_sb_info), GFP_KERNEL);
 	if (sbi == NULL) {
-		critln("%s, out of memory", __func__);
+		critln("%s, out of memory", __FUNCTION__);
 		err = -ENOMEM;
 		goto out_free;
 	}
@@ -307,11 +295,11 @@ static int sdcardfs_read_super(struct super_block *sb,
 	/* parse options */
 	err = sdcardfs_parse_options(&sbi->options, raw_data, silent, &debug);
 	if (err) {
-		errln("%s, invalid options", __func__);
+		errln("%s, invalid options", __FUNCTION__);
 		goto out_freesbi;
 	}
 
-#ifdef CONFIG_SDCARD_FS_RESERVED_SPACE
+#ifdef SDCARDFS_SUPPORT_RESERVED_SPACE
 	sbi->basepath = lower_path;
 	path_get(&sbi->basepath);
 #endif
@@ -329,59 +317,51 @@ static int sdcardfs_read_super(struct super_block *sb,
 	/* inherit maxbytes from lower file system */
 	sb->s_maxbytes = lower_sb->s_maxbytes;
 
-	/*
-	 * Our c/m/atime granularity is 1 ns because we may stack on file
-	 * systems whose granularity is as good.
-	 */
+	/* Our c/m/atime granularity is 1 ns because we may stack on file
+	   systems whose granularity is as good. */
 	sb->s_time_gran = 1;
 	sb->s_op = &sdcardfs_sops;
 	sb->s_d_op = &sdcardfs_ci_dops;
 
 	/* get a inode and allocate our root dentry */
-	inode = new_inode(sb);
-	if (inode == NULL) {
-		err = -ENOMEM;
+	inode = sdcardfs_ialloc(sb, lower_inode->i_mode);
+	if (IS_ERR(inode)) {
+		err = PTR_ERR(inode);
 		goto out_sput;
 	}
 
-	sdcardfs_fill_inode(inode, lower_inode->i_mode);
-
-	/* generate the sdcardfs root dentry */
+	/* make the sdcardfs root dentry */
 	sb->s_root = d_make_root(inode);
 	if (sb->s_root == NULL) {
 		err = -ENOMEM;
 		goto out_iput;
 	}
 
-	/* setup a tree_entry for root dentry */
+	/* setup tree entry for root dentry */
 	err = __sdcardfs_setup_root(sb->s_root, lower_path.dentry,
 		sbi->options.fs_user_id, sbi->options.multiuser);
 	if (err)
 		goto out_freeroot;
 
-	/* save underlayfs rootdir(devpath) to sbi */
+	/* save obbpath(devpath) to sbi */
 	sbi->devpath_s = __getname();
 	if (sbi->devpath_s == NULL) {
 		err = -ENOMEM;
 		goto out_freetreeentry;
 	}
+
 	snprintf(sbi->devpath_s, PATH_MAX, "%s", dev_name);
 	sbi->devpath_s[PATH_MAX - 1] = '\0';
 
-#ifdef CONFIG_SDCARD_FS_PLUGIN_PRIVACY_SPACE
+#ifdef SDCARDFS_PLUGIN_PRIVACY_SPACE
 	sbi->blocked_userid = sbi->appid_excluded = -1;
 #endif
 
-#ifdef CONFIG_SDCARD_FS_SYSFS
+#ifdef SDCARDFS_SYSFS_FEATURE
 	/* use kobject_unregister instread of kfree to free sbi after succeed */
 	err = sdcardfs_sysfs_register_sb(sb);
 	if (err)
 		goto out_putname;
-#endif
-
-#ifdef SDCARDFS_CASE_INSENSITIVE
-	/* prepare ci ops for lowerfs */
-	sbi->ci = sdcardfs_lowerfs_ci_ops(lower_sb);
 #endif
 
 	/* prepare fs_struct */
@@ -395,26 +375,16 @@ static int sdcardfs_read_super(struct super_block *sb,
 		sbi->sdcardd_cred = prepare_creds();
 		if (sbi->sdcardd_cred == NULL) {
 			errln("%s, failed to prepare creds "
-				"in order to override secid", __func__);
+				"in order to override secid", __FUNCTION__);
 			sbi->options.has_fssecid = false;
 		}
 	}
 
-	if (!sbi->options.multiuser)
-		/*
-		 * if sdcardfs runs in the single-user mode, there is no need
-		 * to generate a shared obb.
-		 */
+	if (!sbi->options.multiuser) {
 		sbi->shared_obb = NULL;
-	else {
-		/*
-		 * if sdcardfs runs in the multi-user mode, a share obb dir
-		 * will be generated in advance.
-		 */
+	} else {
 		struct dentry *dir;
-		struct fs_struct *saved_fs =
-			override_current_fs(sbi->override_fs);
-
+		struct fs_struct *saved_fs = override_current_fs(sbi->override_fs);
 		dir = prepare_dir("obb", 0775, sbi->options.fs_low_uid,
 			sbi->options.fs_low_gid);
 		revert_current_fs(saved_fs);
@@ -427,11 +397,9 @@ static int sdcardfs_read_super(struct super_block *sb,
 		sbi->shared_obb = dir;
 	}
 
-	/*
-	 * No need to call interpose because we already have
-	 * a positive dentry, which was instantiated by
-	 * d_make_root. Just need to d_rehash it.
-	 */
+	/* No need to call interpose because we already have
+	   a positive dentry, which was instantiated by
+	   d_make_root. Just need to d_rehash it. */
 	d_rehash(sb->s_root);
 
 	if (!silent)
@@ -444,10 +412,8 @@ out_freefsstruct:
 out_putname:
 	__putname(sbi->devpath_s);
 out_freetreeentry:
-	/*
-	 * dput_final will go into d_release, there is no need to
-	 * call sdcardfs_free_tree_entry(sb->s_root) explicitly;
-	 */
+	/* because dput_final will go into d_release, so it is no need
+	   to call sdcardfs_free_tree_entry(sb->s_root) explicitly; */
 	dget(lower_path.dentry);
 out_freeroot:
 	dput(sb->s_root);
@@ -457,13 +423,13 @@ out_iput:
 out_sput:
 	/* drop refs we took earlier */
 	atomic_dec(&lower_sb->s_active);
-#ifdef CONFIG_SDCARD_FS_RESERVED_SPACE
+#ifdef SDCARDFS_SUPPORT_RESERVED_SPACE
 	_path_put(&sbi->basepath);
 #endif
 out_freesbi:
 	/* it ensures the right behavior in sdcardfs_put_super */
 	sb->s_fs_info = NULL;
-#ifdef CONFIG_SDCARD_FS_SYSFS
+#ifdef SDCARDFS_SYSFS_FEATURE
 	if (sbi->kobj.state_initialized)
 		kobject_put(&sbi->kobj);
 	else
@@ -502,6 +468,7 @@ sdcardfs_mount(struct file_system_type *fs_type, int flags,
 	return mount_nodev(fs_type, flags,
 		(void *)&priv, __sdcardfs_fill_super);
 }
+/*lint -restore*/
 
 static void sdcardfs_kill_sb(struct super_block *sb)
 {
@@ -532,7 +499,7 @@ static int __init init_sdcardfs_fs(void)
 	if (err)
 		goto err_tree;
 
-#ifdef CONFIG_SDCARD_FS_SYSFS
+#ifdef SDCARDFS_SYSFS_FEATURE
 	err = sdcardfs_sysfs_init();
 	if (err)
 		goto err_configfs;
@@ -542,7 +509,7 @@ static int __init init_sdcardfs_fs(void)
 	if (!err)
 		return 0;
 
-#ifdef CONFIG_SDCARD_FS_SYSFS
+#ifdef SDCARDFS_SYSFS_FEATURE
 	sdcardfs_sysfs_exit();
 err_configfs:
 #endif
@@ -556,15 +523,15 @@ err:
 static void __exit exit_sdcardfs_fs(void)
 {
 	unregister_filesystem(&sdcardfs_fs_type);
-#ifdef CONFIG_SDCARD_FS_SYSFS
+#ifdef SDCARDFS_SYSFS_FEATURE
 	sdcardfs_sysfs_exit();
 #endif
 	sdcardfs_configfs_exit();
 	sdcardfs_destroy_tree_cache();
-	infoln("finalize sdcardfs module successfully");
+	infoln("finalize sdcardfs module successfully\n");
 }
 
-MODULE_AUTHOR("Gao Xiang <gaoxiang25@huawei.com>, CONSUMER BG, HUAWEI inc.");
+MODULE_AUTHOR("Gao Xiang <gaoxiang25@huawei.com>, CUSTOMER BG, HUAWEI inc.");
 MODULE_DESCRIPTION("HUAWEI Sdcardfs " SDCARDFS_VERSION);
 MODULE_LICENSE("GPL");
 

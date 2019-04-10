@@ -4,8 +4,6 @@
  * Copyright (c) 2013 Samsung Electronics Co. Ltd
  *   Authors: Daeho Jeong, Woojoong Lee, Seunghwan Hyun,
  *               Sunghwan Yun, Sungjong Seo
- * Copyright (c) 2017 HUAWEI, Inc.
- *   Authors: Gao Xiang <gaoxiang25@huawei.com>
  *
  * This program has been developed as a stackable file system based on
  * the WrapFS which written by
@@ -68,10 +66,10 @@ static ssize_t sdcardfs_write(struct file *file, const char __user *buf,
 	struct file *lower_file;
 	struct dentry *dentry = file->f_path.dentry;
 
-#ifdef CONFIG_SDCARD_FS_RESERVED_SPACE
+#ifdef SDCARDFS_SUPPORT_RESERVED_SPACE
 	/* check disk space */
 	if (!check_min_free_space(dentry->d_sb, count, 0)) {
-		infoln("%s, No minimum free space.", __func__);
+		infoln("%s, No minimum free space.", __FUNCTION__);
 		return -ENOSPC;
 	}
 #endif
@@ -110,18 +108,17 @@ static long sdcardfs_unlocked_ioctl(struct file *file, unsigned int cmd,
 				  unsigned long arg)
 {
 	long err = -ENOTTY;
-	struct file *lower_file = sdcardfs_lower_file(file);
+	struct file *lower_file;
+
+	lower_file = sdcardfs_lower_file(file);
 
 	/* XXX: use vfs_ioctl if/when VFS exports it */
-	if (lower_file != NULL && lower_file->f_op != NULL
-		&& lower_file->f_op->unlocked_ioctl != NULL) {
-		const struct cred *saved_cred =
-			override_creds(lower_file->f_cred);
-
+	if (!lower_file || !lower_file->f_op)
+		goto out;
+	if (lower_file->f_op->unlocked_ioctl)
 		err = lower_file->f_op->unlocked_ioctl(lower_file, cmd, arg);
-		revert_creds(saved_cred);
-	}
 
+out:
 	return err;
 }
 
@@ -130,18 +127,17 @@ static long sdcardfs_compat_ioctl(struct file *file, unsigned int cmd,
 				unsigned long arg)
 {
 	long err = -ENOTTY;
-	struct file *lower_file = sdcardfs_lower_file(file);
+	struct file *lower_file;
+
+	lower_file = sdcardfs_lower_file(file);
 
 	/* XXX: use vfs_ioctl if/when VFS exports it */
-	if (lower_file != NULL && lower_file->f_op != NULL
-		&& lower_file->f_op->compat_ioctl != NULL) {
-		const struct cred *saved_cred =
-			override_creds(lower_file->f_cred);
-
+	if (!lower_file || !lower_file->f_op)
+		goto out;
+	if (lower_file->f_op->compat_ioctl)
 		err = lower_file->f_op->compat_ioctl(lower_file, cmd, arg);
-		revert_creds(saved_cred);
-	}
 
+out:
 	return err;
 }
 #endif
@@ -222,6 +218,11 @@ static int sdcardfs_open(struct inode *inode, struct file *file)
 		goto out_err;
 	}
 
+	if (!check_caller_access_to_name(parent, dentry->d_name.name)) {
+		err = -EACCES;
+		goto out_err;
+	}
+
 	/* save current_cred and override it */
 	OVERRIDE_CRED(sbi, saved_cred);
 	if (IS_ERR(saved_cred)) {
@@ -238,7 +239,7 @@ static int sdcardfs_open(struct inode *inode, struct file *file)
 
 	/* open lower object and link sdcardfs's file struct to lower's */
 	sdcardfs_get_lower_path(dentry, &lower_path);
-	lower_file = dentry_open(&lower_path, file->f_flags, current_cred());
+	lower_file = dentry_open(&lower_path, file->f_flags, current_cred());	/*lint !e666*/
 	/* TODO: add file opened statistics */
 	if (IS_ERR(lower_file)) {
 		err = PTR_ERR(lower_file);
@@ -290,19 +291,23 @@ static int sdcardfs_fsync(struct file *file, loff_t start, loff_t end,
 			int datasync)
 {
 	int err;
+	struct file *lower_file;
+	struct path lower_path;
+	struct dentry *dentry = file->f_path.dentry;
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0))
 	err = __generic_file_fsync(file, start, end, datasync);
 #else
 	err = generic_file_fsync(file, start, end, datasync);
 #endif
-	if (!err) {
-		struct file *lower_file = sdcardfs_lower_file(file);
+	if (err)
+		goto out;
 
-		/* call data & metadata sync of underlayfs */
-		err = vfs_fsync_range(lower_file, start, end, datasync);
-	}
-
+	lower_file = sdcardfs_lower_file(file);
+	sdcardfs_get_lower_path(dentry, &lower_path);
+	err = vfs_fsync_range(lower_file, start, end, datasync);
+	_path_put(&lower_path);
+out:
 	return err;
 }
 
@@ -312,8 +317,7 @@ static int sdcardfs_fasync(int fd, struct file *file, int flag)
 	struct file *lower_file = NULL;
 
 	lower_file = sdcardfs_lower_file(file);
-	if (lower_file != NULL && lower_file->f_op != NULL
-		&& lower_file->f_op->fasync != NULL)
+	if (lower_file->f_op && lower_file->f_op->fasync)
 		err = lower_file->f_op->fasync(fd, lower_file, flag);
 
 	return err;
@@ -350,11 +354,11 @@ ssize_t sdcardfs_write_iter(struct kiocb *iocb, struct iov_iter *iter)
 		goto out;
 	}
 
-#ifdef CONFIG_SDCARD_FS_RESERVED_SPACE
+#ifdef SDCARDFS_SUPPORT_RESERVED_SPACE
 	/* check disk space */
 	if (!check_min_free_space(file->f_path.dentry->d_sb,
 		iov_iter_count(iter), 0)) {
-		infoln("%s, No minimum free space.", __func__);
+		infoln("%s, No minimum free space.", __FUNCTION__);
 		err = -ENOSPC;
 		goto out;
 	}

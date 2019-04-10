@@ -1,4 +1,4 @@
-/* vim:set ts=8 sw=8 tw=0 noet ft=c:
+/* vim:set ts=4 sw=4 tw=0 noet ft=c:
  *
  * fs/sdcardfs/namei.c
  *
@@ -15,19 +15,25 @@
 
 #include "trace-events.h"
 
-static int is_weird_inode(mode_t mode)
-{
+static int __is_weird_inode(mode_t mode) {
 	return S_ISBLK(mode) || S_ISCHR(mode) ||
 		S_ISFIFO(mode) || S_ISSOCK(mode) || S_ISLNK(mode);
 }
 
-void sdcardfs_fill_inode(struct inode *inode, mode_t mode)
-{
+struct inode *sdcardfs_ialloc(
+	struct super_block *sb,
+	mode_t mode
+){
+	struct inode *inode = new_inode(sb);
+
+	if (unlikely(inode == NULL))
+		return ERR_PTR(-ENOMEM);
+
 	inode->i_ino = get_next_ino();
 	inode->i_version = 1;
 	inode->i_generation = get_seconds();
 
-	BUG_ON(is_weird_inode(mode));
+	BUG_ON(__is_weird_inode(mode));
 
 	/* use different set of inode ops for symlinks & directories */
 	if (S_ISDIR(mode)) {
@@ -43,133 +49,125 @@ void sdcardfs_fill_inode(struct inode *inode, mode_t mode)
 	inode->i_mapping->a_ops = &sdcardfs_aops;
 
 	trace_sdcardfs_ialloc(inode);
+	return inode;
 }
 
-/*
- * the caller should take an *extra* real_dentry
- * reference count for sdcardfs_interpose
- */
+/* 1) it's optional to lock the parent by the caller.
+      so we cannot assume real_dentry is still hashed now
+   2) sdcardfs_interpose use a real_dentry refcount
+      increased by the caller */
 struct dentry *sdcardfs_interpose(
 	struct dentry *parent,
 	struct dentry *dentry,
-	struct dentry *real_dentry)
-{
+	struct dentry *real_dentry
+) {
+	/* d_sb has been assigned by d_alloc */
 	struct sdcardfs_tree_entry *te;
 	struct dentry *lower_dentry;
 	struct inode *inode, *lower_inode;
-	/* d_sb has been assigned by d_alloc */
 	struct super_block *sb = dentry->d_sb;
 
-	/*
-	 * dentry cannot be seen by others, so it's no need
-	 * taking dentry d_lock
-	 */
+	/* dentry cannot be seen by others, so it's no need
+	   taking dentry d_lock */
 	BUG_ON(!d_unhashed(dentry));
 	BUG_ON(d_really_is_positive(dentry));
 
-	/*
-	 * since the real_dentry has been referenced, it cannot
-	 * turn into negative state.
-	 */
+	/* since the real_dentry is referenced, it cannot turn
+	   into negative state. therefore it is no need taking d_lock.
+	   there are some races with parent, d_name? */
 	BUG_ON(d_is_negative(real_dentry));
 
-	inode = new_inode(sb);
-	if (unlikely(inode == NULL)) {
-		errln("%s, failed to new inode", __func__);
+	te = sdcardfs_init_tree_entry(dentry, real_dentry);
+	if (unlikely(te == NULL)) {
 		dput(real_dentry);
-
 		return ERR_PTR(-ENOMEM);
 	}
-
-	te = SDCARDFS_I(inode);
-	sdcardfs_init_tree_entry(te, real_dentry);
+	get_derived_permission(parent, dentry);
 
 	/* before d_add, we can access lower_dentry without locking */
 	lower_dentry = (te->ovl != NULL ? te->ovl : te->real.dentry);
 
 	lower_inode = d_inode(lower_dentry);
-	sdcardfs_fill_inode(inode, lower_inode->i_mode);
+	inode = sdcardfs_ialloc(sb, lower_inode->i_mode);
+	if (IS_ERR(inode)) {
+		errln("%s, failed to alloc inode, err=%d",
+			__FUNCTION__, PTR_ERR(inode));
+
+		sdcardfs_free_tree_entry(dentry);
+		return (struct dentry *)inode;
+	}
+
+	/* used for revalidate in inode_permission */
+	inode->i_private = te;
 	fsstack_copy_inode_size(inode, lower_inode);
 
-	d_instantiate(dentry, inode);
-
-	get_derived_permission(parent, dentry);
 	__fix_derived_permission(te, inode);
-
-	d_rehash(dentry);
+	d_add(dentry, inode);
 	return NULL;
 }
 
-static int is_weird_dentry(struct dentry *dentry)
+static int __is_weird_dentry(struct dentry *dentry)
 {
 	int weird = dentry->d_flags & (DCACHE_NEED_AUTOMOUNT |
 		DCACHE_MANAGE_TRANSIT);
 	if (likely(!weird)) {
-		/*
-		 * since whether d_inode is NULL pointer
-		 * has been checked by the caller
-		 */
-		weird = is_weird_inode(d_inode(dentry)->i_mode);
+		/* since whether d_inode == NULL has
+		   been checked by the caller */
+		weird = __is_weird_inode(d_inode(dentry)->i_mode);
 	}
 	return weird;
 }
 
-static inline struct dentry *after_lookup_real(struct dentry *real)
-{
+static inline
+struct dentry *__lookup_real(struct dentry *dir,
+	const char *name, int len
+) {
+	struct dentry *real;
+
+	inode_lock_nested(d_inode(dir), I_MUTEX_PARENT);
+	real = lookup_one_len(name, dir, len);
+	inode_unlock(d_inode(dir));
+
 	if (IS_ERR(real)) {
 		if (real == ERR_PTR(-ENOENT))
 			real = NULL;
 	} else if (d_really_is_negative(real)) {
 		dput(real);
 		real = NULL;
-	} else if (is_weird_dentry(real)) {
+	} else if (__is_weird_dentry(real)) {
 		dput(real);
-		/*
-		 * Don't support traversing
-		 * automounts and other weirdness
-		 */
+		/* Don't support traversing automounts and other weirdness */
 		real = ERR_PTR(-EREMOTE);
 	}
 	return real;
 }
 
-static inline struct dentry *lookup_real_ci(
-	struct sdcardfs_sb_info *sbi,
+static inline
+struct dentry *__lookup_real_ci(
+	struct vfsmount *mnt,
 	struct dentry *dir,
-	struct qstr *orig)
+	struct qstr *qname)
 {
-	struct dentry *dentry;
+	struct dentry *ret;
+	char *name;
 
-	inode_lock_nested(d_inode(dir), I_MUTEX_PARENT);
-	dentry = after_lookup_real(lookup_one_len(orig->name,
-		dir, orig->len));
-#ifdef SDCARDFS_CASE_INSENSITIVE
-	/*
-	 * if case-exact lookup don't find a inode and
-	 * the case-insensitive lookup is available on
-	 * the underlayfs, try to lookup_ci again.
-	 */
-	if (dentry == NULL && sbi->ci->lookup != NULL) {
-		struct dentry *found;
-		struct path path = {.dentry = dir,
-			.mnt = sbi->lower_mnt};
+	name = sdcardfs_do_lookup_ci_begin(mnt, dir,
+		qname, false);
 
-		/* remember that lookup(_ci) wont return NULL */
-		found = sbi->ci->lookup(&path, orig, true);
-		dentry = after_lookup_real(found);
+	if (IS_ERR(name) || name == NULL)
+		return (struct dentry *)name;
 
-		if (unlikely(dentry == NULL && !IS_ERR(found)))
-			dentry = ERR_PTR(-ESTALE);
-	}
-#endif
-	inode_unlock(d_inode(dir));
-	return dentry;
+	ret = __lookup_real(dir, name, qname->len);
+	sdcardfs_do_lookup_ci_end(name);
+	if (ret == NULL)
+		ret = ERR_PTR(-ESTALE);
+	return ret;
 }
 
-struct dentry *sdcardfs_lookup(
-	struct inode *dir,
-	struct dentry *dentry,
-	unsigned int flags)
+/* parent dir lock should be locked */
+struct dentry *
+sdcardfs_lookup(struct inode *dir,
+	struct dentry *dentry, unsigned int flags)
 {
 	struct dentry *parent;
 	struct dentry *lower_dir_dentry, *ret;
@@ -182,10 +180,8 @@ struct dentry *sdcardfs_lookup(
 	parent = dget_parent(dentry);
 	BUG_ON(d_inode(parent) != dir);
 
-	/*
-	 * d_revalidate should have been triggered. so
-	 * the lower_dir_entry must be hashed
-	 */
+	/* d_revalidate should have been triggered. so
+	   the lower_dir_entry must be hashed */
 	lower_dir_dentry = sdcardfs_get_lower_dentry(parent);
 	BUG_ON(lower_dir_dentry == NULL);
 
@@ -199,30 +195,36 @@ struct dentry *sdcardfs_lookup(
 		goto out;
 	}
 
-	ret = lookup_real_ci(sbi, lower_dir_dentry, &dentry->d_name);
-	REVERT_CRED(saved_cred);
+	ret = __lookup_real(lower_dir_dentry,
+		dentry->d_name.name, dentry->d_name.len);
 	if (ret == NULL) {
-		if (!(flags & (LOOKUP_CREATE | LOOKUP_RENAME_TARGET)))
-			ret = ERR_PTR(-ENOENT);
-		else {
-			/*
-			 * in this case, the dentry is still negative.
-			 * fsdata will be initialized in create/rename
-			 * and we dont need to d_instantiate the dentry
-			 * since DCACHE_MISS_TYPE == 0x00000000
-			 */
-			/* d_instantiate(dentry, NULL); */
+#ifdef SDCARDFS_CASE_INSENSITIVE
+		ret = __lookup_real_ci(sbi->lower_mnt, lower_dir_dentry, &dentry->d_name);
+		if (ret == NULL) {
+#endif
+			if (!(flags & (LOOKUP_CREATE | LOOKUP_RENAME_TARGET)))
+				ret = ERR_PTR(-ENOENT);
+			else {
+				/* in this case, the dentry is still negative.
+				   fsdata will be initialized in create/rename */
+
+				/* and, we dont need to d_instantiate the dentry */
+				/* since DCACHE_MISS_TYPE == 0x00000000 */
+				/* d_instantiate(dentry, NULL); */
+			}
+			REVERT_CRED(saved_cred);
+			goto out;
+#ifdef SDCARDFS_CASE_INSENSITIVE
 		}
-		goto out;
+#endif
 	}
+	REVERT_CRED(saved_cred);
 
 	if (!IS_ERR(ret))
 		ret = sdcardfs_interpose(parent, dentry, ret);
 out:
-	/*
-	 * Only in __sdcardfs_interpose, sdcardfs_init_tree_entry would
-	 * be called. So we can d_release a dentry without tree_entry
-	 */
+	/* Only in __sdcardfs_interpose, sdcardfs_init_tree_entry would
+	   be called. So we can d_release a dentry without tree_entry */
 	dput(lower_dir_dentry);
 	dput(parent);
 

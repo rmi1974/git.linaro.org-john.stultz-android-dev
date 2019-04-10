@@ -1,4 +1,4 @@
-/* vim:set ts=8 sw=8 tw=0 noet ft=c:
+/* vim:set ts=4 sw=4 tw=0 noet ft=c:
  *
  * fs/sdcardfs/sysfs.c
  *
@@ -11,19 +11,18 @@
  */
 #include "sdcardfs.h"
 
-#ifdef CONFIG_SDCARD_FS_PLUGIN_PRIVACY_SPACE
+#ifdef SDCARDFS_PLUGIN_PRIVACY_SPACE
 static ssize_t
 sdcardfs_sysfs_sb_blocked_users_show(struct kobject *kobj,
-	struct kobj_attribute *attr, char *buf)
-{
+	struct kobj_attribute *attr, char *buf) {
 
 	struct sdcardfs_sb_info *sbi = container_of(kobj,
 		struct sdcardfs_sb_info, kobj);
 	ssize_t len = 0;
 
 	if (sbi->blocked_userid >= 0)
-		len = sprintf(buf, "%d %d", sbi->blocked_userid,
-			sbi->appid_excluded);
+		len = snprintf(buf, PAGE_SIZE, "%d %d",
+			sbi->blocked_userid, sbi->appid_excluded);
 	buf[len++] = '\n';
 	buf[len++] = '\0';
 	return len;
@@ -32,8 +31,7 @@ sdcardfs_sysfs_sb_blocked_users_show(struct kobject *kobj,
 static ssize_t
 sdcardfs_sysfs_sb_blocked_users_store(struct kobject *kobj,
 	struct kobj_attribute *attr,
-	const char *buf, size_t len)
-{
+	const char *buf, size_t len) {
 
 	struct sdcardfs_sb_info *sbi = container_of(kobj,
 		struct sdcardfs_sb_info, kobj);
@@ -63,8 +61,7 @@ sdcardfs_sysfs_sb_blocked_users_store(struct kobject *kobj,
 
 static ssize_t
 sdcardfs_sysfs_sb_device_show(struct kobject *kobj,
-	struct kobj_attribute *attr, char *buf)
-{
+	struct kobj_attribute *attr, char *buf) {
 
 	struct sdcardfs_sb_info *sbi = container_of(kobj,
 		struct sdcardfs_sb_info, kobj);
@@ -96,8 +93,8 @@ sdcardfs_sysfs_attr_store(struct kobject *kobj,
 	size_t len)
 {
 	struct kobj_attribute *ka;
-	char *s = skip_spaces(buf);
 
+	char *s = skip_spaces(buf);
 	len -= s - buf;
 	buf = s;
 
@@ -109,21 +106,21 @@ sdcardfs_sysfs_attr_store(struct kobject *kobj,
 }
 
 #define __SYSFS_ATTR_RW(name)	\
-	((struct kobj_attribute)__ATTR(name, S_IWUSR | S_IRUGO, \
-sdcardfs_sysfs_sb_##name##_show, sdcardfs_sysfs_sb_##name##_store))
+	(struct kobj_attribute)__ATTR(name, S_IWUSR | S_IRUGO, \
+sdcardfs_sysfs_sb_##name##_show, sdcardfs_sysfs_sb_##name##_store)
 
 #define __SYSFS_ATTR_RO(name)	\
-	((struct kobj_attribute)__ATTR(name, S_IRUGO, \
-sdcardfs_sysfs_sb_##name##_show, NULL))
+	(struct kobj_attribute)__ATTR(name, S_IRUGO, \
+sdcardfs_sysfs_sb_##name##_show, NULL)
 
-static const struct sysfs_ops sysfs_op = {
+static struct sysfs_ops sysfs_op = {
 	.show = sdcardfs_sysfs_attr_show,
 	.store = sdcardfs_sysfs_attr_store
 };
 
 static struct attribute *sb_attrs[] = {
 	&__SYSFS_ATTR_RO(device).attr,
-#ifdef CONFIG_SDCARD_FS_PLUGIN_PRIVACY_SPACE
+#ifdef SDCARDFS_PLUGIN_PRIVACY_SPACE
 	&__SYSFS_ATTR_RW(blocked_users).attr,
 #endif
 	NULL,	/* need to NULL terminate the list of attributes */
@@ -146,6 +143,8 @@ int sdcardfs_sysfs_init(void)
 
 void sdcardfs_sysfs_exit(void)
 {
+	BUG_ON(sdcardfs_kset == NULL);
+
 	kset_unregister(sdcardfs_kset);
 }
 
@@ -153,6 +152,8 @@ int sdcardfs_sysfs_register_sb(struct super_block *sb)
 {
 	int err;
 	struct sdcardfs_sb_info *sbi = SDCARDFS_SB(sb);
+
+	BUG_ON(sdcardfs_kset == NULL);
 
 	sbi->kobj.kset = sdcardfs_kset;
 	err = kobject_init_and_add(&sbi->kobj, &sb_ktype, NULL,

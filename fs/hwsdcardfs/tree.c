@@ -1,4 +1,4 @@
-/* vim:set ts=8 sw=8 tw=0 noet ft=c:
+/* vim:set ts=4 sw=4 tw=0 noet ft=c:
  *
  * fs/sdcardfs/tree.c
  *
@@ -11,33 +11,59 @@
  */
 #include "sdcardfs.h"
 
-void sdcardfs_init_tree_entry(struct sdcardfs_tree_entry *te,
+/* The tree cache is just so we have properly sized dentries */
+static struct kmem_cache *sdcardfs_tree_entry_cachep;
+
+int sdcardfs_init_tree_cache(void)
+{
+	sdcardfs_tree_entry_cachep = kmem_cache_create("sdcardfs_tree_entry",
+		sizeof(struct sdcardfs_tree_entry),
+		0, SLAB_RECLAIM_ACCOUNT, NULL);
+	return sdcardfs_tree_entry_cachep != NULL ? 0 : -ENOMEM;
+}
+
+void sdcardfs_destroy_tree_cache(void)
+{
+	BUG_ON(sdcardfs_tree_entry_cachep == NULL);
+	kmem_cache_destroy(sdcardfs_tree_entry_cachep);
+}
+
+struct sdcardfs_tree_entry *
+sdcardfs_init_tree_entry(struct dentry *dentry,
 	struct dentry *real)
 {
+	struct sdcardfs_tree_entry *te =
+		kmem_cache_zalloc(sdcardfs_tree_entry_cachep, GFP_KERNEL);
+
+	if (te == NULL)
+		return NULL;
 	te->real.d_seq = __read_seqcount_begin(&real->d_seq);
 	te->real.dentry = real;
 	rwlock_init(&te->lock);
+
+	smp_wmb();
+	ACCESS_ONCE(dentry->d_fsdata) = te;
+	return te;
 }
 
-void sdcardfs_invalidate_tree_entry(struct sdcardfs_tree_entry *te)
+/* no lock for callers plz */
+void sdcardfs_free_tree_entry(struct dentry *dentry)
 {
-	struct dentry *real;
+	struct sdcardfs_tree_entry *te = SDCARDFS_DI_X(dentry);
 
-	write_lock(&te->lock);
-	real = te->real.dentry_invalid ? NULL : te->real.dentry;
-	te->real.dentry = NULL;
-	write_unlock(&te->lock);
+	if (te != NULL) {
+		struct dentry *real = te->real.dentry_invalid ?
+			NULL : te->real.dentry;
 
-	if (real != NULL) {
-		debugln("%s, te=%p real=%p name=%s", __func__, te,
-			real, real->d_name.name);
+		debugln("%s, dentry(%p, %s) free %p",
+			__FUNCTION__, dentry, dentry->d_name.name, te);
+		write_unlock(&te->lock);
+
+		/* dput could lead to reclaim lower_dentry/inode.
+		   so, it is not suitable to put dput in a rwlock */
+		dput(real);
+		kmem_cache_free(sdcardfs_tree_entry_cachep, te);
 	}
-
-	/*
-	 * dput could lead to reclaim lower_dentry/inode.
-	 * so, it is not suitable to put dput in a rwlock
-	 */
-	dput(real);
 }
 
 struct __sdcardfs_ilookup5_priv_data {
@@ -45,7 +71,8 @@ struct __sdcardfs_ilookup5_priv_data {
 	__u32 generation;
 };
 
-static int __sdcardfs_ilookup5_test(struct inode *inode, void *_priv)
+static int
+__sdcardfs_ilookup5_test(struct inode *inode, void *_priv)
 {
 	struct __sdcardfs_ilookup5_priv_data *p = _priv;
 
@@ -60,7 +87,6 @@ static struct dentry *__sdcardfs_d_reclaim_alias(
 	unsigned d_seq
 ) {
 	struct dentry *found = NULL;
-
 	if (likely(!hlist_empty(&inode->i_dentry))) {
 		spin_lock(&inode->i_lock);
 		hlist_for_each_entry(found, &inode->i_dentry, d_u.d_alias) {
@@ -95,14 +121,11 @@ static int __sdcardfs_evaluate_real_locked(
 	rcu_read_lock();
 	parent = ACCESS_ONCE(dentry->d_parent);
 	BUG_ON(parent == dentry);
-
-	pte = SDCARDFS_D(parent);
+	pte = SDCARDFS_DI_R(parent);
 	rcu_read_unlock();
-	/* parent dentry shouldn't invalid since referenced */
-	BUG_ON(pte->real.dentry_invalid);
-
 	if (candidate->d_parent != pte->real.dentry)
 		valid = 0;
+	read_unlock(&pte->lock);
 
 	if (valid) {
 		if (dentry->d_name.len !=
@@ -126,29 +149,20 @@ static int __sdcardfs_evaluate_real_locked(
 }
 #endif
 
-struct dentry *sdcardfs_reactivate_real(const struct dentry *dentry)
-{
-	struct sdcardfs_tree_entry *te = SDCARDFS_D(dentry);
+struct dentry *
+_sdcardfs_reactivate_real_locked(
+	const struct dentry *dentry,
+	struct sdcardfs_tree_entry *te
+) {
 	struct dentry *pivot, *victim = NULL;
 	struct inode *real_inode;
 	struct __sdcardfs_ilookup5_priv_data priv;
 
-	debugln("%s, dentry=%p ino=%lu generation=%u", __func__,
-		dentry, te->real.ino, te->real.generation);
+	BUG_ON(!te->real.dentry_invalid);
 
 	priv.ino = te->real.ino;
 	priv.generation = te->real.generation;
-
-	/*
-	 * Since dentry is referenced, d_count should be taken by d_lock held.
-	 * therefore there is no race with .d_delete. However, after .d_delete
-	 * there could be 1+ ops to trigger sdcardfs_reactivate_real
-	 * in parallel, which differs from the world prior to
-	 * "ANDROID: sdcardfs: optimize relationship and locks (experimental)"
-	 */
-	smp_mb();
-	if (unlikely(!te->real.dentry_invalid))
-		goto out;
+	read_unlock(&te->lock);
 
 	real_inode = ilookup5_nowait(
 		sdcardfs_lower_super(dentry->d_sb),
@@ -158,14 +172,13 @@ struct dentry *sdcardfs_reactivate_real(const struct dentry *dentry)
 	write_lock(&te->lock);
 
 	/* safe accessed without te lock */
-	if (!te->real.dentry_invalid)
+	if (!te->real.dentry_invalid) {
 		goto out_unlock;
+	}
 
 	if (real_inode == NULL ||
-	/*
-	 * if the real_inode is in I_NEW state,
-	 * it shouldn't be the original real one
-	 */
+	/* if the real_inode is in I_NEW state,
+	   it shouldn't be the original real one */
 		test_bit(__I_NEW, &real_inode->i_state)) {
 		pivot = NULL;
 		goto out_pivot;
@@ -176,7 +189,7 @@ struct dentry *sdcardfs_reactivate_real(const struct dentry *dentry)
 		te->real.dentry, te->real.d_seq);
 
 #ifdef SDCARDFS_UNDERLAY_MULTI_ALIASES
-	if (pivot != NULL) {
+	if (pivot != NULL && !S_ISDIR(real_inode->i_mode)) {
 		int valid;
 
 		valid = __sdcardfs_evaluate_real_locked(dentry, te, pivot);
@@ -199,7 +212,6 @@ out_unlock:
 	write_unlock(&te->lock);
 	iput(real_inode);
 	dput(victim);
-out:
+	read_lock(&te->lock);
 	return te->real.dentry;
 }
-

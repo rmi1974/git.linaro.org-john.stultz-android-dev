@@ -1,4 +1,4 @@
-/* vim:set ts=8 sw=8 tw=0 noet ft=c:
+/* vim:set ts=4 sw=4 tw=0 noet ft=c:
  *
  * fs/sdcardfs/derived_perm.c
  *
@@ -25,7 +25,6 @@ const struct cred *prepare_fsids(struct sdcardfs_sb_info *sbi)
 		const struct cred *saved_cred = override_creds(sbi->sdcardd_cred);
 		if (likely(saved_cred != NULL)) {
 			int ret = set_security_override(cred, sbi->options.fs_low_secid);
-
 			if (unlikely(ret < 0)) {
 				critln("Security denies permission to nominate"
 					" security context: %d", ret);
@@ -39,8 +38,7 @@ const struct cred *prepare_fsids(struct sdcardfs_sb_info *sbi)
 }
 
 /* Do not directly use this function. Use OVERRIDE_CRED() instead. */
-const struct cred *override_fsids(struct sdcardfs_sb_info *sbi)
-{
+const struct cred *override_fsids(struct sdcardfs_sb_info *sbi) {
 	const struct cred *cred = prepare_fsids(sbi);
 
 	if (cred == NULL)
@@ -57,11 +55,13 @@ void revert_fsids(const struct cred *old_cred)
 	put_cred(cur_cred);
 }
 
-struct fs_struct *prepare_fs_struct(struct path *root, int umask)
-{
-	struct fs_struct *fs =
-		kzalloc(sizeof(struct fs_struct), GFP_KERNEL);
+struct fs_struct *prepare_fs_struct(
+	struct path *root,
+	int umask
+) {
+	struct fs_struct *fs;
 
+	fs = kzalloc(sizeof(struct fs_struct), GFP_KERNEL);
 	if (fs == NULL)
 		return NULL;
 
@@ -78,12 +78,33 @@ struct fs_struct *prepare_fs_struct(struct path *root, int umask)
 	return fs;
 }
 
+/* Kernel has already enforced everything we returned through
+ * derive_permissions_locked(), so this is used to lock down access
+ * even further, such as enforcing that apps hold sdcard_rw. */
+int check_caller_access_to_name(
+	struct dentry *parent,
+	const char *name
+) {
+	int err = 1;
+	struct sdcardfs_tree_entry *pi = SDCARDFS_DI_R(parent);
+	/* Always block security-sensitive files at root */
+	if (pi->perm == PERM_ROOT) {
+		if (!strcasecmp(name, "autorun.inf")
+			|| !strcasecmp(name, ".android_secure")
+			|| !strcasecmp(name, "android_secure")) {
+			err = 0;
+		}
+	}
+	read_unlock(&pi->lock);
+	return err;
+}
+
 /* copy derived state from parent inode */
 static inline void
 __inherit_derived_state(
 	struct sdcardfs_tree_entry *pi,	/* parent tree entry */
-	struct sdcardfs_tree_entry *ci)	/* tree entry that we want to inherit */
-{
+	struct sdcardfs_tree_entry *ci		/* tree entry that we want to inherit */
+) {
 	ci->revision = pi->revision;
 
 	ci->perm = PERM_INHERIT;
@@ -103,65 +124,52 @@ void __get_derived_permission(struct super_block *sb, const char *name,
 
 	/* Derive custom permissions based on parent and current node */
 	switch (pi->perm) {
-	case PERM_INHERIT:
-		/* Already inherited above */
-		break;
+		case PERM_INHERIT:
+			/* Already inherited above */
+			break;
 
-	case PERM_PRE_ROOT:
-		/* Legacy internal layout places users at top level */
-		ci->perm = PERM_ROOT;
-		if (!kstrtouint(name, 10, &userid))
-			ci->userid = userid;
-		break;
+		case PERM_PRE_ROOT:
+			/* Legacy internal layout places users at top level */
+			ci->perm = PERM_ROOT;
+			if (!kstrtouint(name, 10, &userid))
+				ci->userid = userid;
+			break;
 
-	case PERM_ROOT:
-		/* Assume masked off by default. */
-		if (!strcasecmp(name, "Android")) {
-			ci->perm = PERM_ANDROID;
-			ci->under_android = true;
-		/*
-		 * Moved from check_caller_access_to_name()
-		 * Always block security-sensitive files at root
-		 */
-		} else if (!strcasecmp(name, "autorun.inf")
-			|| !strcasecmp(name, ".android_secure")
-			|| !strcasecmp(name, "android_secure"))
-			ci->perm = PERM_JAILHOUSE;
-		break;
+		case PERM_ROOT:
+			/* Assume masked off by default. */
+			if (!strcasecmp(name, "Android")) {
+				/* App-specific directories inside; let anyone traverse */
+				ci->perm = PERM_ANDROID;
+				ci->under_android = true;
+			}
+			break;
 
-	case PERM_ANDROID:
-		if (!strcasecmp(name, "data")) {
-			/* App-specific directories inside */
-			ci->perm = PERM_ANDROID_DATA;
-		} else if (!strcasecmp(name, "obb")) {
-			/* App-specific directories inside */
-			ci->perm = PERM_ANDROID_OBB;
+		case PERM_ANDROID:
+			if (!strcasecmp(name, "data")) {
+				/* App-specific directories inside; let anyone traverse */
+				ci->perm = PERM_ANDROID_DATA;
+			} else if (!strcasecmp(name, "obb")) {
+				/* App-specific directories inside; let anyone traverse */
+				ci->perm = PERM_ANDROID_OBB;
 
-			/*
-			 * if shared_obb != NULL, shared obb
-			 * for multiuser is available
-			 */
-			ci->ovl = SDCARDFS_SB(sb)->shared_obb;
-		} else if (!strcasecmp(name, "media")) {
-			/* App-specific directories inside */
-			ci->perm = PERM_ANDROID_MEDIA;
-		}
-		break;
+				/* Single OBB directory is always shared */
+				/* if shared_obb != NULL, Single OBB directory is available */
+				ci->ovl = SDCARDFS_SB(sb)->shared_obb;
+			} else if (!strcasecmp(name, "media")) {
+				/* App-specific directories inside; let anyone traverse */
+				ci->perm = PERM_ANDROID_MEDIA;
+			}
+			break;
 
-	case PERM_ANDROID_DATA:
-	case PERM_ANDROID_OBB:
-	case PERM_ANDROID_MEDIA:
-		appid = get_appid(name);
-		if (appid < AID_SYSTEM)
-			ci->revision = 0;
-		else
-			ci->d_uid = multiuser_get_uid(pi->userid, appid);
-		break;
-
-	case PERM_JAILHOUSE:
-		/* always denied due to security issues */
-		ci->perm = PERM_JAILHOUSE;
-		break;
+		case PERM_ANDROID_DATA:
+		case PERM_ANDROID_OBB:
+		case PERM_ANDROID_MEDIA:
+			appid = get_appid(name);
+			if (appid < AID_SYSTEM)
+				ci->revision = 0;
+			else
+				ci->d_uid = multiuser_get_uid(pi->userid, appid);
+			break;
 	}
 }
 
@@ -169,12 +177,14 @@ void get_derived_permission4(struct dentry *parent,
 	struct dentry *dentry,
 	const char *rename, bool lazy_recursive)
 {
-	struct sdcardfs_tree_entry *pi = SDCARDFS_D(parent);
-	struct sdcardfs_tree_entry *ci = SDCARDFS_D(dentry);
+	struct sdcardfs_tree_entry *pi = SDCARDFS_DI_R(parent);
+	struct sdcardfs_tree_entry *ci = SDCARDFS_DI_W(dentry);
 
 	__get_derived_permission(dentry->d_sb, rename, pi, ci);
 	if (lazy_recursive)
 		ci->revision = get_next_revision(dentry);
+	write_unlock(&ci->lock);
+	read_unlock(&pi->lock);
 }
 
 void get_derived_permission(struct dentry *parent, struct dentry *dentry)
@@ -182,4 +192,3 @@ void get_derived_permission(struct dentry *parent, struct dentry *dentry)
 	get_derived_permission4(parent, dentry,
 		dentry->d_name.name, false);
 }
-

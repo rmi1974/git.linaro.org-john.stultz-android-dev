@@ -1,4 +1,4 @@
-/* vim:set ts=8 sw=8 tw=0 noet ft=c:
+/* vim:set ts=4 sw=4 tw=0 noet ft=c:
  *
  * fs/sdcardfs/sdcardfs.h
  *
@@ -32,23 +32,18 @@
 #include <linux/list.h>
 #include <linux/fs_struct.h>
 #include <linux/ratelimit.h>
-#ifdef CONFIG_SDCARD_FS_SYSFS
+#ifdef SDCARDFS_SYSFS_FEATURE
 #include <linux/kobject.h>
 #endif
 
-#define __SDCARDFS_MISC__COMPAT_DEFS
-#include "misc.h"
 #include "multiuser.h"
+#include "macros.h"
 
-#ifndef SDCARDFS_SUPER_MAGIC
-/* the sdcard file system magic number */
+/* the file system magic number */
 #define SDCARDFS_SUPER_MAGIC	0x5dca2df5
-#endif
 
-#ifndef SDCARDFS_NAME
-/* the sdcard file system name */
-#define SDCARDFS_NAME __stringify(__SDCARDFS__)
-#endif
+/* the file system name */
+#define SDCARDFS_NAME "sdcardfs"
 
 #undef pr_fmt
 #define pr_fmt(fmt)	SDCARDFS_NAME ": " fmt
@@ -64,8 +59,9 @@
 #include "android_filesystem_config.h"
 
 static inline
-struct fs_struct *override_current_fs(struct fs_struct *fs)
-{
+struct fs_struct *override_current_fs(
+	struct fs_struct *fs
+) {
 	struct fs_struct *saved_fs;
 
 	task_lock(current);
@@ -84,47 +80,40 @@ void __free_fs_struct(struct fs_struct *fs)
 	kfree(fs);
 }
 
-#define revert_current_fs       override_current_fs
-#define free_fs_struct          __free_fs_struct
+#define revert_current_fs	override_current_fs
+#define free_fs_struct	__free_fs_struct
 
-/*
- * OVERRIDE_CRED() and REVERT_CRED()
+/* OVERRIDE_CRED() and REVERT_CRED()
  *  - OVERRIDE_CRED()
  *      backup original task->cred
  *      and modifies task->cred->fsuid/fsgid to specified value.
  *  - REVERT_CRED()
  *      restore original task->cred->fsuid/fsgid.
- * Remember that these two macros should be used in pair
- */
+ * Remember that these two macros should be used in pair */
+
 #define OVERRIDE_CRED(sdcardfs_sbi, saved_cred) (saved_cred = override_fsids(sdcardfs_sbi))
 #define REVERT_CRED(saved_cred)	revert_fsids(saved_cred)
 
-/* runtime permissions model since Android M */
+/* Android 6.0 runtime permissions model */
 
-/*
- * Permission mode for a specific node. Controls how file permissions
- * are derived for children nodes.
- */
+/* Permission mode for a specific node. Controls how file permissions
+ * are derived for children nodes. */
 typedef enum {
-	/* Nothing special; this node should just inherit from its parent. */
-	PERM_INHERIT,
-	/*
-	 * This node is one level above a normal root; used for legacy layouts
-	 * which use the first level to represent user_id.
-	 */
-	PERM_PRE_ROOT,
-	/* This node is "/" */
-	PERM_ROOT,
-	/* This node is "/Android" */
-	PERM_ANDROID,
-	/* This node is "/Android/data" */
-	PERM_ANDROID_DATA,
-	/* This node is "/Android/obb" */
-	PERM_ANDROID_OBB,
-	/* This node is "/Android/media" */
-	PERM_ANDROID_MEDIA,
-	/* nodes which have security issues */
-	PERM_JAILHOUSE,
+    /* Nothing special; this node should just inherit from its parent. */
+    PERM_INHERIT,
+    /* This node is one level above a normal root; used for legacy layouts
+     * which use the first level to represent user_id. */
+    PERM_PRE_ROOT,
+    /* This node is "/" */
+    PERM_ROOT,
+    /* This node is "/Android" */
+    PERM_ANDROID,
+    /* This node is "/Android/data" */
+    PERM_ANDROID_DATA,
+    /* This node is "/Android/obb" */
+    PERM_ANDROID_OBB,
+    /* This node is "/Android/media" */
+    PERM_ANDROID_MEDIA,
 } perm_t;
 
 struct sdcardfs_sb_info;
@@ -145,8 +134,9 @@ extern const struct address_space_operations sdcardfs_aops;
 extern const struct vm_operations_struct sdcardfs_vm_ops;
 
 /* lookup_ci.c */
-extern struct sdcardfs_dir_ci_ops *
-sdcardfs_lowerfs_ci_ops(struct super_block *);
+extern char *sdcardfs_do_lookup_ci_begin(struct vfsmount *,
+	struct dentry *, struct qstr *, bool);
+extern void sdcardfs_do_lookup_ci_end(char *);
 
 /* namei.c */
 extern struct dentry *sdcardfs_lookup(struct inode *dir,
@@ -157,9 +147,13 @@ extern struct dentry *sdcardfs_interpose(struct dentry *,
 	struct dentry *, struct dentry *);
 
 /* inode.c */
-extern void sdcardfs_fill_inode(struct inode *inode, mode_t mode);
+extern struct inode *sdcardfs_ialloc(struct super_block *, mode_t);
+extern int touch_nomedia(struct dentry *parent);
 
-#ifdef CONFIG_SDCARD_FS_XATTR
+/* tree.c */
+extern int sdcardfs_init_tree_cache(void);
+extern void sdcardfs_destroy_tree_cache(void);
+
 /* xattr.c */
 extern int sdcardfs_setxattr(struct dentry *dentry,
 	const char *name, const void *value, size_t size, int flags);
@@ -168,11 +162,6 @@ extern ssize_t sdcardfs_getxattr(struct dentry *dentry,
 extern ssize_t sdcardfs_listxattr(struct dentry *dentry,
 	char *list, size_t size);
 extern int sdcardfs_removexattr(struct dentry *dentry, const char *name);
-#endif
-
-/* tree.c */
-extern int sdcardfs_init_tree_cache(void);
-extern void sdcardfs_destroy_tree_cache(void);
 
 /* valid file mode bits */
 #define SDCARDFS_VALID_MODE	(S_IFREG | S_IFDIR | S_IRWXUGO)
@@ -198,23 +187,14 @@ struct sdcardfs_mount_options {
 	unsigned int reserved_mb;
 };
 
-#ifdef SDCARDFS_CASE_INSENSITIVE
-struct sdcardfs_dir_ci_ops {
-	struct dentry *(*lookup)(struct path *, struct qstr *, bool);
-	int (*may_create)(struct path *, struct qstr *);
-};
-#endif
-
 /* sdcardfs super-block data in memory */
 struct sdcardfs_sb_info {
 	struct vfsmount *lower_mnt;
-	/*
-	 * derived perm policy : some of options have been added
-	 * to sdcardfs_mount_options (Android 4.4 support)
-	 */
+	/* derived perm policy : some of options have been added
+	 * to sdcardfs_mount_options (Android 4.4 support) */
 	struct sdcardfs_mount_options options;
 	char *devpath_s;
-#ifdef CONFIG_SDCARD_FS_RESERVED_SPACE
+#ifdef SDCARDFS_SUPPORT_RESERVED_SPACE
 	struct path basepath;
 #endif
 	struct dentry *shared_obb;
@@ -222,18 +202,15 @@ struct sdcardfs_sb_info {
 	struct fs_struct *override_fs;
 	struct cred *sdcardd_cred;
 
-#ifdef CONFIG_SDCARD_FS_SYSFS
+#ifdef SDCARDFS_SYSFS_FEATURE
 	struct kobject kobj;
 #endif
 
-#ifdef CONFIG_SDCARD_FS_PLUGIN_PRIVACY_SPACE
+#ifdef SDCARDFS_PLUGIN_PRIVACY_SPACE
 	int blocked_userid, appid_excluded;
 #endif
 
 	unsigned next_revision;
-#ifdef SDCARDFS_CASE_INSENSITIVE
-	struct sdcardfs_dir_ci_ops *ci;
-#endif
 };
 
 /* superblock to private data */
@@ -254,29 +231,21 @@ static inline struct super_block *sdcardfs_lower_super(
 struct sdcardfs_tree_entry {
 	rwlock_t lock;
 
-	/* used to overlay the obb dir for each user */
 	struct dentry *ovl;
 	struct {
 		struct dentry *dentry;
 
-		/*
-		 * if the corresponding underlayfs real dentry was released,
-		 * the ino/generation pair will be used to reactivate real
-		 * dentry again.
-		 */
-		unsigned long ino;
+		/* if sdcardfs_disconnected, use ino/genertion pair
+		   to connect real again. */
+		unsigned long	ino;
 		__u32 generation;
 
 		bool dentry_invalid;
-
-		/* much faster than checking d_parent, d_name in many cases */
 		unsigned d_seq;
 	} real;
 
-	/*
-	 * a number used to decide whether permissions
-	 * should be updated from the parent when revalidated
-	 */
+	/* a number used to decide whether permissions
+	   should be updated from the parent when revalidated */
 	unsigned revision;
 
 	/* state derived based on current position in hierachy */
@@ -284,92 +253,198 @@ struct sdcardfs_tree_entry {
 	userid_t userid;
 	uid_t d_uid;
 	bool under_android;
-
-	/* the corresponding false upper inode */
-	struct inode vfs_inode;
 };
 
-/* tree entry can be accessed either from inode or dentry */
-#define SDCARDFS_I(inode) container_of(inode, \
-	struct sdcardfs_tree_entry, vfs_inode)
+#define SDCARDFS_DI_LOCKED		((void *)0x19921118)
 
-static inline struct sdcardfs_tree_entry *SDCARDFS_D(const struct dentry *d)
-{
-	struct inode *inode = d_inode_rcu(d);
+/* keep in mind SDCARDFS_D is unsafe for RCU lookup */
+static inline
+struct sdcardfs_tree_entry *SDCARDFS_D(
+	const struct dentry *d
+) {
+	struct sdcardfs_tree_entry *te;
 
-	BUG_ON(inode == NULL);
-	return SDCARDFS_I(inode);
-}
-
-/* SDCARDFS_DI_W should only be called out of RCU-lookup */
-static inline struct sdcardfs_tree_entry *SDCARDFS_DI_W(const struct dentry *d)
-{
-	struct sdcardfs_tree_entry *te = SDCARDFS_D((struct dentry *)d);
-
-	write_lock(&te->lock);
+	while ((te = (struct sdcardfs_tree_entry *)
+		lockless_dereference(d->d_fsdata)) == SDCARDFS_DI_LOCKED)
+		cpu_relax();
 	return te;
 }
 
-extern struct dentry *sdcardfs_reactivate_real(const struct dentry *dentry);
+static inline
+struct sdcardfs_tree_entry *SDCARDFS_DI_X(
+	const struct dentry *_d
+) {
+	struct dentry *d = (struct dentry *)_d;
+	struct sdcardfs_tree_entry *te;
 
-#define sdcardfs_tree_entry_real_rcu(te)	\
-	(te->real.dentry_invalid ? NULL : te->real.dentry)
+	while ((te = (struct sdcardfs_tree_entry *)xchg(
+		&d->d_fsdata, SDCARDFS_DI_LOCKED)) == SDCARDFS_DI_LOCKED)
+		cpu_relax();
 
-static inline struct dentry *
-sdcardfs_get_real_dentry_with_seq(const struct dentry *dentry, unsigned *d_seq)
-{
-	struct sdcardfs_tree_entry *te = SDCARDFS_D(dentry);
-
-	*d_seq = te->real.d_seq;
-	return dget(!te->real.dentry_invalid ?
-		te->real.dentry :
-		sdcardfs_reactivate_real(dentry));
+	smp_mb();
+	ACCESS_ONCE(d->d_fsdata) = NULL;
+	if (te != NULL)
+		write_lock(&te->lock);
+	return te;
 }
 
-static inline struct dentry *
-sdcardfs_get_real_dentry(const struct dentry *dentry)
-{
+/* acquire tree entry with te read locked */
+static inline
+struct sdcardfs_tree_entry *SDCARDFS_DI_R(
+	const struct dentry *_d
+) {
+	struct dentry *d = (struct dentry *)_d;
+	struct sdcardfs_tree_entry *te;
+
+	while ((te = (struct sdcardfs_tree_entry *)xchg(
+		&d->d_fsdata, SDCARDFS_DI_LOCKED)) == SDCARDFS_DI_LOCKED)
+		cpu_relax();
+	BUG_ON(te == NULL);
+	read_lock(&te->lock);
+	return ACCESS_ONCE(d->d_fsdata) = te;
+}
+
+/* acquire tree entry with te write locked */
+static inline
+struct sdcardfs_tree_entry *SDCARDFS_DI_W(
+	const struct dentry *_d
+) {
+	struct dentry *d = (struct dentry *)_d;
+	struct sdcardfs_tree_entry *te;
+
+	while ((te = (struct sdcardfs_tree_entry *)xchg(
+		&d->d_fsdata, SDCARDFS_DI_LOCKED)) == SDCARDFS_DI_LOCKED)
+		cpu_relax();
+	BUG_ON(te == NULL);
+	write_lock(&te->lock);
+	return ACCESS_ONCE(d->d_fsdata) = te;
+}
+
+extern struct dentry *
+_sdcardfs_reactivate_real_locked(const struct dentry *dentry,
+	struct sdcardfs_tree_entry *te);
+
+static inline
+struct sdcardfs_tree_entry *
+sdcardfs_tree_entry_real_locked(
+	const struct dentry *dentry,
+	struct dentry **real_dentry
+) {
+	struct sdcardfs_tree_entry *te = SDCARDFS_DI_R(dentry);
+	*real_dentry = (!te->real.dentry_invalid ? te->real.dentry :
+		_sdcardfs_reactivate_real_locked(dentry, te));
+	return te;
+}
+
+static inline
+struct sdcardfs_tree_entry *
+sdcardfs_tree_entry_lower_locked(
+	const struct dentry *dentry,
+	struct dentry **lower_dentry
+) {
+	struct sdcardfs_tree_entry *te = SDCARDFS_DI_R(dentry);
+	*lower_dentry = (te->ovl != NULL ? te->ovl :
+		(!te->real.dentry_invalid ? te->real.dentry :
+			_sdcardfs_reactivate_real_locked(dentry, te)));
+	return te;
+}
+
+static inline
+struct sdcardfs_tree_entry *
+sdcardfs_real_dentry_rcu_locked(
+	struct dentry *d,
+	struct dentry **real_dentry
+) {
+	/* it is needed to treat differently for RCU approach.
+	 * because countref isnt taken and free_tree_entry
+	 * could be triggered at the same time */
+	struct sdcardfs_tree_entry *te;
+
+	while ((te = (struct sdcardfs_tree_entry *)xchg(
+		&d->d_fsdata, SDCARDFS_DI_LOCKED)) == SDCARDFS_DI_LOCKED)
+		cpu_relax();
+
+	if (te != NULL) {
+		read_lock(&te->lock);
+		*real_dentry = (te->real.dentry_invalid ? NULL :
+			te->real.dentry);
+	}
+	ACCESS_ONCE(d->d_fsdata) = te;
+	return te;
+}
+
+static inline
+struct dentry *sdcardfs_get_real_dentry_with_seq(
+	const struct dentry *dentry,
+	unsigned *d_seq
+) {
+	struct sdcardfs_tree_entry *te;
+	struct dentry *real_dentry;
+
+	te = sdcardfs_tree_entry_real_locked(dentry, &real_dentry);
+	real_dentry = dget(real_dentry);
+	*d_seq = te->real.d_seq;
+	read_unlock(&te->lock);
+
+	return real_dentry;
+}
+
+static inline
+struct dentry *sdcardfs_get_real_dentry(
+	const struct dentry *dentry
+) {
 	unsigned d_seq;
 
-	return sdcardfs_get_real_dentry_with_seq(dentry, &d_seq);
+	return sdcardfs_get_real_dentry_with_seq(
+		dentry, &d_seq);
 }
 
-static inline struct dentry *
-sdcardfs_get_lower_dentry(const struct dentry *dentry)
-{
-	struct sdcardfs_tree_entry *te = SDCARDFS_D(dentry);
+static inline
+struct dentry *sdcardfs_get_lower_dentry(
+	const struct dentry *dentry
+) {
+	struct sdcardfs_tree_entry *te;
+	struct dentry *lower_dentry;
 
-	return dget(te->ovl != NULL ? te->ovl :
-		(!te->real.dentry_invalid ? te->real.dentry :
-		sdcardfs_reactivate_real(dentry)));
+	te = sdcardfs_tree_entry_lower_locked(dentry, &lower_dentry);
+	lower_dentry = dget(lower_dentry);
+	read_unlock(&te->lock);
+
+	return lower_dentry;
 }
 
-extern void sdcardfs_init_tree_entry(struct sdcardfs_tree_entry *te,
-	struct dentry *);
-extern void sdcardfs_invalidate_tree_entry(struct sdcardfs_tree_entry *);
+extern struct sdcardfs_tree_entry *
+	sdcardfs_init_tree_entry(struct dentry *, struct dentry *);
+extern void sdcardfs_free_tree_entry(struct dentry *);
 
 /* need fixup its permission from its parent */
-#define need_fixup_permission(dir, te) (te->revision < dir->i_version)
+static inline int need_fixup_permission(
+	struct inode *dir,
+	struct sdcardfs_tree_entry *te
+) {
+	return te->revision < dir->i_version;
+}
 
 static inline void __fix_derived_permission(
 	struct sdcardfs_tree_entry *te,
-	struct inode *inode)
-{
-	int visible_mode, owner_mode, filtered_mode;
+	struct inode *inode
+) {
+#if defined(SDCARDFS_DEBUG_UID) && defined(SDCARDFS_DEBUG_GID)
+	inode->i_uid = make_kuid(&init_user_ns, SDCARDFS_DEBUG_UID);
+	inode->i_gid = make_kgid(&init_user_ns, SDCARDFS_DEBUG_GID);
+#else
 	struct sdcardfs_mount_options *opts =
 		&SDCARDFS_SB(inode->i_sb)->options;
+	int visible_mode, owner_mode, filtered_mode;
 
 	inode->i_uid = make_kuid(&init_user_ns, te->d_uid);
 
 	if (opts->gid == AID_SDCARD_RW) {
-		/*
-		 * As an optimization, certain trusted system components
-		 * only run as owner but operate across all users.
-		 * Since we're now handing out the sdcard_rw GID only to
-		 * trusted apps, we're okay relaxing the user boundary
-		 * enforcement for the default view. The UIDs assigned to
-		 * app directories are still multiuser aware.
-		 */
+		/* As an optimization, certain trusted system components only run
+		 * as owner but operate across all users. Since we're now handing
+		 * out the sdcard_rw GID only to trusted apps, we're okay relaxing
+		 * the user boundary enforcement for the default view. The UIDs
+		 * assigned to app directories are still multiuser aware. */
 		inode->i_gid = make_kgid(&init_user_ns, AID_SDCARD_RW);
 	} else {
 		inode->i_gid = make_kgid(&init_user_ns,
@@ -380,17 +455,13 @@ static inline void __fix_derived_permission(
 	visible_mode = 0775 & ~opts->mask;
 
 	if (te->perm == PERM_PRE_ROOT) {
-		/*
-		 * Top of multi-user view should always be visible to ensure
-		 * secondary users can traverse inside.
-		 */
+		/* Top of multi-user view should always be visible to ensure
+		 * secondary users can traverse inside. */
 		visible_mode = 0711;
 	} else if (te->under_android) {
-		/*
-		 * Block "other" access to Android directories, since only apps
+		/* Block "other" access to Android directories, since only apps
 		 * belonging to a specific user should be in there; we still
-		 * leave +x open for the default view.
-		 */
+		 * leave +x open for the default view. */
 		if (opts->gid == AID_SDCARD_RW)
 			visible_mode = visible_mode & ~0006;
 		else
@@ -401,35 +472,42 @@ static inline void __fix_derived_permission(
 	inode->i_mode = (inode->i_mode & S_IFMT) | filtered_mode;
 
 	inode->i_version = te->revision;
+#endif
 }
 
-#define fix_derived_permission(d) \
-	__fix_derived_permission(SDCARDFS_D(d), d_inode(d))
+static inline void fix_derived_permission(
+	struct dentry *dentry
+) {
+	struct sdcardfs_tree_entry *te = SDCARDFS_DI_R(dentry);
 
-/* file to private data */
+	__fix_derived_permission(te, d_inode(dentry));
+	read_unlock(&te->lock);
+}
+
+/* file to private Data */
 #define SDCARDFS_F(file) ((struct sdcardfs_file_info *)((file)->private_data))
 
 /* file to lower file */
 #define sdcardfs_lower_file(f)	(SDCARDFS_F(f)->lower_file)
 
-static inline int sdcardfs_get_lower_path(const struct dentry *dentry,
-	struct path *path)
-{
+static inline int sdcardfs_get_lower_path(
+	const struct dentry *dentry, struct path *path
+) {
 	path->dentry = sdcardfs_get_lower_dentry(dentry);
 	if (path->dentry != NULL) {
 		path->mnt = mntget(SDCARDFS_SB(dentry->d_sb)->lower_mnt);
 		debugln("%s, dentry=%p, lower_path(dentry=%p, mnt=%p)",
-			__func__, dentry, path->dentry, path->mnt);
+			__FUNCTION__, dentry, path->dentry, path->mnt);
 		return 0;
 	}
-	debugln("%s, dentry=%p, lower_path(null)", __func__, dentry);
+	debugln("%s, dentry=%p, lower_path(null)", __FUNCTION__, dentry);
 	return -1;
 }
 
 static inline void _path_put(const struct path *path)
 {
-	debugln("%s, lower_path(dentry=%p, mnt=%p)", __func__,
-		path->dentry, path->mnt);
+	debugln("%s, lower_path(dentry=%p, mnt=%p)",
+		__FUNCTION__, path->dentry, path->mnt);
 
 	path_put(path);
 }
@@ -451,43 +529,22 @@ extern int sdcardfs_configfs_init(void);
 extern void sdcardfs_configfs_exit(void);
 
 /* sysfs.c */
-#ifdef CONFIG_SDCARD_FS_SYSFS
+#ifdef SDCARDFS_SYSFS_FEATURE
 extern int sdcardfs_sysfs_init(void);
 extern void sdcardfs_sysfs_exit(void);
 extern int sdcardfs_sysfs_register_sb(struct super_block *);
 #endif
 
 /* derived_perm.c */
+extern int check_caller_access_to_name(struct dentry *, const char *);
+
 extern void get_derived_permission4(struct dentry *,
 	struct dentry *, const char *, bool);
 extern void get_derived_permission(struct dentry *, struct dentry *);
 
-static inline bool
-permission_denied_to_create(struct inode *dir, const char *name)
-{
-	struct sdcardfs_tree_entry *te = SDCARDFS_I(dir);
-
-	if (te != NULL && te->perm == PERM_ROOT)
-		return !strcasecmp(name, "autorun.inf");
-	return false;
-}
-
-static inline bool
-permission_denied_to_remove(struct inode *dir, const char *name)
-{
-	struct sdcardfs_tree_entry *te = SDCARDFS_I(dir);
-
-	if (te != NULL && te->perm == PERM_ROOT)
-		return !strcasecmp(name, ".android_secure") ||
-			!strcasecmp(name, "android_secure");
-	return false;
-}
-
-#ifdef CONFIG_SDCARD_FS_RESERVED_SPACE
-/*
- * Return 1, if the disk has enough free space, otherwise 0.
- * We assume that any files can not be overwritten.
- */
+#ifdef SDCARDFS_SUPPORT_RESERVED_SPACE
+/* Return 1, if a disk has enough free space, otherwise 0.
+ * We assume that any files can not be overwritten. */
 static inline int check_min_free_space(struct super_block *sb,
 	size_t size, int isdir)
 {
@@ -524,7 +581,7 @@ out_nospc:
 			return 0;
 		}
 
-		/* Invalid statfs information */
+		/* Invalid statfs informations. */
 		if (unlikely(!statfs.f_bsize))
 			goto out_invalid;
 
@@ -546,8 +603,7 @@ out_nospc:
 #endif
 
 /* Copies attrs and maintains sdcardfs managed attrs */
-static inline void sdcardfs_copy_and_fix_attrs(struct inode *dest,
-	const struct inode *src)
+static inline void sdcardfs_copy_and_fix_attrs(struct inode *dest, const struct inode *src)
 {
 	dest->i_rdev = src->i_rdev;
 	dest->i_atime = src->i_atime;
@@ -557,6 +613,4 @@ static inline void sdcardfs_copy_and_fix_attrs(struct inode *dest,
 	dest->i_flags = src->i_flags;
 	set_nlink(dest, src->i_nlink);
 }
-
-#endif	/* not __SDCARDFS_H */
-
+#endif	/* not _SDCARDFS_H_ */

@@ -1,4 +1,4 @@
-/* vim:set ts=8 sw=8 tw=0 noet ft=c:
+/* vim:set ts=4 sw=4 tw=0 noet ft=c:
  *
  * fs/sdcardfs/dentry.c
  *
@@ -28,12 +28,12 @@ static inline void dentry_rcuwalk_barrier(struct dentry *dentry)
 #endif
 }
 
-/*
- * locking order:
+/* locking order:
  *     dentry->d_lock
- *         te->lock
- *             real, ovl->d_lock
- */
+ *         SDCARDFS_DI_LOCK
+ *             te->lock */
+
+/*lint -save -e454 -e455 -e456*/
 static int sdcardfs_d_delete(const struct dentry *dentry)
 {
 	struct sdcardfs_tree_entry *te;
@@ -44,18 +44,17 @@ static int sdcardfs_d_delete(const struct dentry *dentry)
 	trace_sdcardfs_d_delete_enter(dentry);
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 12, 0))
-	/*
-	 * only for Linux versions which "vfs: reorganize dput()
-	 * memory accesses" from Linus is not applied
-	 */
+	/* only for Linux versions which "vfs: reorganize dput()
+	   memory accesses" from Linus is not applied */
 	if (unlikely(d_unhashed(dentry)))
 		goto out;
 #endif
 
 	te = SDCARDFS_DI_W(dentry);
+	/* since dentry is hashed, there is no way that te == NULL */
+	BUG_ON(te == NULL);
 
-	/*
-	 * Since d_delete can be "deleted" for many times,
+	/* Since d_delete can be "deleted" for many times,
 	 * it may break in just after d_revalidate
 	 *
 	 * lookup_fast
@@ -65,8 +64,7 @@ static int sdcardfs_d_delete(const struct dentry *dentry)
 	 *     unlazy_walk
 	 *           dget
 	 *           dput
-	 *                d_delete <---- already invalid
-	 */
+	 *                d_delete <---- already invalid */
 	if (te->real.dentry_invalid == true) {
 		ret = 0;	/* maybe better than kill it */
 		goto out_unlock;
@@ -92,15 +90,13 @@ static int sdcardfs_d_delete(const struct dentry *dentry)
 		te->real.ino = real_inode->i_ino;
 		te->real.generation = real_inode->i_generation;
 
-		debugln("%s, dentry=%p (ino=%lu, gen=%u)", __func__, dentry,
+		debugln("%s, dentry=%p (ino=%lu, gen=%u)", __FUNCTION__, dentry,
 			te->real.ino, te->real.generation);
 
 		te->real.dentry_invalid = true;
 
-		/*
-		 * since real_dentry is invalid, we should prevent
-		 * the dentry revalidated in the lookup_fast path
-		 */
+		/* since real_dentry is invalid, we should prevent
+		   the dentry revalidated in the lookup_fast path */
 		dentry_rcuwalk_barrier(cast);
 		write_unlock(&te->lock);
 
@@ -112,11 +108,8 @@ static int sdcardfs_d_delete(const struct dentry *dentry)
 
 		spin_lock(&cast->d_lock);
 
-		/*
-		 * we prefer to check again whether the dentry
-		 * is (un)reachable if d_count == 1
-		 */
 		ret = likely(d_count(dentry) == 1) ?
+			/* we need to check again whether it is unreachable now. */
 			d_unhashed(dentry) : 0;
 		goto out;
 	}
@@ -127,41 +120,35 @@ out:
 	trace_sdcardfs_d_delete_exit(dentry, ret);
 	return ret;
 }
+/*lint -restore*/
 
-/*
- * d_revalidate only focus on revalidating the real dentry.
- * because we assume that the ovldentry cannot be d_drop.
- */
-static int __sdcardfs_d_revalidate_fast(struct dentry *dentry,
-	unsigned int flags)
-{
-	struct inode *inode;
+/* d_revalidate only focus on revalidating the real dentry.
+   because we assume that the ovldentry cannot be d_drop. */
+static int __sdcardfs_d_revalidate_fast(
+	struct dentry *dentry,
+	unsigned int flags
+) {
 	struct sdcardfs_tree_entry *te;
 	struct dentry *real_dentry;
 	int err = 1;
 
 	trace_sdcardfs_d_revalidate_fast_enter(dentry, flags);
 
-	inode = d_inode_rcu(dentry);
-
-	/*
-	 * if dentry_unlink_inode() before, should invalidate it (differ
-	 * from VFS). think why we needn't considering after :)
-	 */
-	if (unlikely(!inode)) {
+	/* if dentry_unlink_inode() before, should invalidate it (differ
+	   from VFS). think why we needn't considering after :) */
+	if (unlikely(!d_inode_rcu(dentry))) {
 		err = 0;
 		goto out;
 	}
 
-	te = SDCARDFS_I(inode);
+	te = sdcardfs_real_dentry_rcu_locked(dentry, &real_dentry);
 
-	/*
-	 * take the read lock to avoid race between rcu-lookup
-	 * and d_delete / reactivation
-	 */
-	read_lock(&te->lock);
+	/* hashed but without te...hmm, reclaiming */
+	if (te == NULL) {
+		err = 0;
+		goto out;
+	}
 
-	real_dentry = sdcardfs_tree_entry_real_rcu(te);
 	if (real_dentry == NULL) {
 		/* fall back to ref-walk mode, then reactivate it */
 out_refwalk:
@@ -170,11 +157,13 @@ out_refwalk:
 		goto out_unlock;
 	}
 
-	/*
-	 * if real_dentry was hashed,
-	 * it will remain hashed iff d_seq isn't changed.
-	 */
-	if (__read_seqcount_retry(&real_dentry->d_seq, te->real.d_seq)) {
+	/* if real_dentry was hashed,
+	   it will remain hashed iff d_seq isnt changed. */
+	if (__read_seqcount_retry(&real_dentry->d_seq,
+		te->real.d_seq)) {
+		/* we cannot confirm the following case, add a WARN_ON to notice that */
+		WARN_ON(IS_ROOT(dentry));
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0))
 		err = 0;		/* dentry invalid */
 		goto out_unlock;
@@ -186,24 +175,20 @@ out_refwalk:
 #endif
 	}
 
-	if (unlikely(need_fixup_permission(
-		d_inode_rcu(ACCESS_ONCE(dentry->d_parent)), te))) {
-		/*
-		 * XXX: it's not suitble for us
-		 * to get_derived_permission in RCU lookup now :-(
-		 */
+	if (need_fixup_permission(
+		d_inode_rcu(ACCESS_ONCE(dentry->d_parent)),	te)) {
+		/* XXX: it's not suitble for us
+		   to get_derived_permission in RCU lookup now :-( */
 		goto out_refwalk;
 	}
 
-	if (unlikely(real_dentry->d_flags & DCACHE_OP_REVALIDATE)) {
+	if ((real_dentry->d_flags & DCACHE_OP_REVALIDATE)) {
 		err = real_dentry->d_op->d_revalidate(real_dentry, flags);
 		if (err < 0)
 			goto out_unlock;
 
-		/*
-		 * follow overlayfs?
-		 * give a chance and fall back to ref-walk
-		 */
+		/* follow overlayfs?
+		   give a chance and fall back to ref-walk */
 		else if (err == 0)
 			goto out_refwalk;
 	}
@@ -215,17 +200,21 @@ out:
 	return err;
 }
 
-static int __sdcardfs_d_revalidate_slow(struct dentry *dentry,
-	unsigned int flags)
-{
+static int __sdcardfs_d_revalidate_slow(
+	struct dentry *dentry,
+	unsigned int flags
+) {
 	struct dentry *parent, *real_dentry;
 	unsigned seq;
 	int ret = 0;
 
 	trace_sdcardfs_d_revalidate_slow_enter(dentry, flags);
 
+	/* root should always walk into __sdcardfs_d_revalidate_fast */
+	BUG_ON(IS_ROOT(dentry));
+
 	/* ref-walk takes a refcount so nothing to worry about */
-	if (unlikely(d_really_is_negative(dentry)))
+	if (d_really_is_negative(dentry))
 		goto out;
 
 	real_dentry = sdcardfs_get_real_dentry_with_seq(dentry, &seq);
@@ -251,8 +240,11 @@ retry:
 		goto retry;
 
 	/* check if the hierarchy of this dentry was changed */
-	if (unlikely(__read_seqcount_retry(&real_dentry->d_seq, seq)))
+	if (unlikely(__read_seqcount_retry(&real_dentry->d_seq, seq))) {
+		/* we cannot confirm the following case, add a WARN_ON to notice that */
+		WARN_ON(IS_ROOT(dentry));
 		ret = 0;
+	}
 
 out_dput:
 	dput(real_dentry);
@@ -261,30 +253,24 @@ out:
 	return ret;
 }
 
+/* return value: -ERRNO if error (returned to user)
+ * 0: tell VFS to invalidate dentry
+ * 1: dentry is valid */
 static int sdcardfs_d_revalidate(
 	struct dentry *dentry,
-	unsigned int flags)
-{
-	/*
-	 * d_revalidate should not be called on root dentry.
-	 * and we dont have disconnected dentry now
-	 */
-	BUG_ON(READ_ONCE(dentry->d_parent) == dentry);
-
+	unsigned int flags
+) {
 	if (flags & LOOKUP_RCU)
 		return __sdcardfs_d_revalidate_fast(dentry, flags);
 	return __sdcardfs_d_revalidate_slow(dentry, flags);
 }
 
-static void sdcardfs_canonical_path(const struct path *path,
-	struct path *actual_path)
-{
-	sdcardfs_get_lower_path(path->dentry, actual_path);
-}
+/* __sdcardfs_d_release is an alias of sdcardfs_free_tree_entry */
+#define sdcardfs_d_release	sdcardfs_free_tree_entry
 
 const struct dentry_operations sdcardfs_ci_dops = {
 	.d_delete	= sdcardfs_d_delete,
 	.d_revalidate	= sdcardfs_d_revalidate,
-
-	.d_canonical_path = sdcardfs_canonical_path,
+	.d_release	= sdcardfs_d_release
 };
+
