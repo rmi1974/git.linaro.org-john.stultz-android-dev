@@ -21,7 +21,26 @@ struct pm8916_pon {
 	struct reboot_mode_driver reboot_mode;
 };
 
-static int pm8916_reboot_mode_write(struct reboot_mode_driver *reboot,
+static int pm8916_gen2_reboot_mode_write(struct reboot_mode_driver *reboot,
+					 unsigned int magic)
+{
+	struct pm8916_pon *pon = container_of
+			(reboot, struct pm8916_pon, reboot_mode);
+	int ret;
+
+
+	printk("JDB: %s writing magic: %i\n", __func__, magic);
+
+	ret = regmap_update_bits(pon->regmap,
+				 pon->baseaddr + PON_SOFT_RB_SPARE,
+				 0xfe, magic << 1);
+	if (ret < 0)
+		dev_err(pon->dev, "update reboot mode bits failed\n");
+
+	return ret;
+}
+
+static int pm8916_gen1_reboot_mode_write(struct reboot_mode_driver *reboot,
 				    unsigned int magic)
 {
 	struct pm8916_pon *pon = container_of
@@ -37,8 +56,11 @@ static int pm8916_reboot_mode_write(struct reboot_mode_driver *reboot,
 	return ret;
 }
 
+static const struct of_device_id pm8916_pon_id_table[];
+
 static int pm8916_pon_probe(struct platform_device *pdev)
 {
+	const struct of_device_id *match;
 	struct pm8916_pon *pon;
 	int error;
 
@@ -60,7 +82,12 @@ static int pm8916_pon_probe(struct platform_device *pdev)
 		return error;
 
 	pon->reboot_mode.dev = &pdev->dev;
-	pon->reboot_mode.write = pm8916_reboot_mode_write;
+	match = of_match_device(pm8916_pon_id_table, &pdev->dev);
+	if (match && match->data)
+		pon->reboot_mode.write = match->data;
+	else
+		pon->reboot_mode.write = pm8916_gen1_reboot_mode_write;
+
 	error = devm_reboot_mode_register(&pdev->dev, &pon->reboot_mode);
 	if (error) {
 		dev_err(&pdev->dev, "can't register reboot mode\n");
@@ -73,8 +100,12 @@ static int pm8916_pon_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id pm8916_pon_id_table[] = {
-	{ .compatible = "qcom,pm8916-pon" },
-	{ .compatible = "qcom,pms405-pon" },
+	{ .compatible = "qcom,pm8916-pon",
+	  .data = pm8916_gen1_reboot_mode_write },
+	{ .compatible = "qcom,pms405-pon",
+	  .data = pm8916_gen1_reboot_mode_write },
+	{ .compatible = "qcom,pm8998-pon",
+	  .data = pm8916_gen2_reboot_mode_write },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, pm8916_pon_id_table);
