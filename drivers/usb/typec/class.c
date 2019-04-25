@@ -1500,7 +1500,7 @@ typec_port_register_altmode(struct typec_port *port,
 
 	sprintf(id, "id%04xm%02x", desc->svid, desc->mode);
 
-	mux = typec_mux_get(port->dev.parent, id);
+	mux = typec_mux_get(&port->dev, id);
 	if (IS_ERR(mux))
 		return ERR_CAST(mux);
 
@@ -1586,19 +1586,26 @@ struct typec_port *typec_register_port(struct device *parent,
 	port->port_type = cap->type;
 	port->prefer_role = cap->prefer_role;
 
+	device_initialize(&port->dev);
 	port->dev.class = typec_class;
 	port->dev.parent = parent;
 	port->dev.fwnode = cap->fwnode;
 	port->dev.type = &typec_port_dev_type;
 	dev_set_name(&port->dev, "port%d", id);
 
-	port->sw = typec_switch_get(cap->fwnode ? &port->dev : parent);
+	port->sw = typec_switch_get(&port->dev);
 	if (IS_ERR(port->sw)) {
-		ret = PTR_ERR(port->sw);
-		goto err_switch;
+		put_device(&port->dev);
+		return ERR_CAST(port->sw);
 	}
 
-	ret = device_register(&port->dev);
+	port->mux = typec_mux_get(&port->dev, "typec-mux");
+	if (IS_ERR(port->mux)) {
+		put_device(&port->dev);
+		return ERR_CAST(port->mux);
+	}
+
+	ret = device_add(&port->dev);
 	if (ret) {
 		dev_err(parent, "failed to register port (%d)\n", ret);
 		put_device(&port->dev);
