@@ -366,14 +366,15 @@
 		};
 
 		usb@78d9000 {
-			extcon = <&usb_id>;
+			extcon = <&usb_id>, <&usb_id>;
 			status = "okay";
 			adp-disable;
 			hnp-disable;
 			srp-disable;
-			dr_mode = "host";
-			pinctrl-names = "default";
-			pinctrl-0 = <&usb_sw_sel_pm>;
+			dr_mode = "otg";
+			pinctrl-names = "default", "device";
+			pinctrl-0 = <&usb_sw_sel_pm &usb_hub_reset_pm>;
+			pinctrl-1 = <&usb_sw_sel_pm_device &usb_hub_reset_pm_device>;
 			ulpi {
 				phy {
 					v1p8-supply = <&pm8916_l7>;
@@ -512,7 +513,7 @@
 
 	usb_id: usb-id {
 		compatible = "linux,extcon-usb-gpio";
-		vbus-gpio = <&msmgpio 121 GPIO_ACTIVE_HIGH>;
+		id-gpio = <&msmgpio 121 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&usb_id_default>;
 	};
@@ -686,5 +687,28 @@
 	l18 {
 		regulator-min-microvolt = <1750000>;
 		regulator-max-microvolt = <3337000>;
+	};
+};
+
+&firmware {
+	android {
+		compatible = "android,firmware";
+		fstab {
+			compatible = "android,fstab";
+			system {
+				compatible = "android,system";
+				dev = "/dev/block/platform/soc/7824900.sdhci/by-name/system";
+				type = "ext4";
+				mnt_flags = "ro" ;
+				fsmgr_flags = "wait";
+			};
+			vendor {
+				compatible = "android,vendor";
+				dev = "/dev/block/platform/soc/7824900.sdhci/by-name/cache";
+				type = "ext4";
+				mnt_flags = "ro" ;
+				fsmgr_flags = "wait";
+			};
+		};
 	};
 };
