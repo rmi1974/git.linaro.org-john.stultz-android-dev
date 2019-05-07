@@ -48,6 +48,10 @@
 	};
 };
 
+&adsp_pas {
+	status = "okay";
+};
+
 &apps_rsc {
 	pm8998-rpmh-regulators {
 		compatible = "qcom,pm8998-rpmh-regulators";
@@ -413,6 +417,10 @@
 &dsi1_phy {
 	status = "okay";
 	vdds-supply = <&vdda_mipi_dsi1_pll>;
+};
+
+&cdsp_pas {
+	status = "okay";
 };
 
 &gcc {
