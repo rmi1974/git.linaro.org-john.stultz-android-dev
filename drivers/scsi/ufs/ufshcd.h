@@ -706,6 +706,8 @@ struct ufs_hba {
 
 	struct device		bsg_dev;
 	struct request_queue	*bsg_queue;
+
+	struct pinctrl *pctrl;
 };
 
 /* Returns true if clocks can be gated. Otherwise false */
