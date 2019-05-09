@@ -4446,7 +4446,7 @@ static int dwc2_hsotg_udc_start(struct usb_gadget *gadget,
 	hsotg->enabled = 0;
 	spin_unlock_irqrestore(&hsotg->lock, flags);
 
-	gadget->sg_supported = using_desc_dma(hsotg);
+//	gadget->sg_supported = using_desc_dma(hsotg);
 	dev_info(hsotg->dev, "bound driver %s\n", driver->driver.name);
 
 	return 0;
