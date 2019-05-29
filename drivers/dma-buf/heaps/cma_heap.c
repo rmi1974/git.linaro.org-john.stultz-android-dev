@@ -32,13 +32,16 @@ struct cma_heap {
 static void cma_heap_free(struct heap_helper_buffer *buffer)
 {
 	struct cma_heap *cma_heap = dma_heap_get_drvdata(buffer->heap);
-	unsigned long nr_pages = buffer->pagecount;
+	unsigned long nr_pages;
 	struct page *cma_pages = buffer->priv_virt;
 
-	/* free page list */
-	kfree(buffer->pages);
+	nr_pages = buffer->size >> PAGE_SHIFT;
+
 	/* release memory */
 	cma_release(cma_heap->cma, cma_pages, nr_pages);
+	/* release sg table */
+	sg_free_table(buffer->sg_table);
+	kfree(buffer->sg_table);
 	kfree(buffer);
 }
 
@@ -50,13 +53,13 @@ static int cma_heap_allocate(struct dma_heap *heap,
 {
 	struct cma_heap *cma_heap = dma_heap_get_drvdata(heap);
 	struct heap_helper_buffer *helper_buffer;
+	struct sg_table *table;
 	struct page *cma_pages;
 	size_t size = PAGE_ALIGN(len);
 	unsigned long nr_pages = size >> PAGE_SHIFT;
 	unsigned long align = get_order(size);
 	struct dma_buf *dmabuf;
 	int ret = -ENOMEM;
-	pgoff_t pg;
 
 	if (align > CONFIG_CMA_ALIGNMENT)
 		align = CONFIG_CMA_ALIGNMENT;
@@ -96,27 +99,26 @@ static int cma_heap_allocate(struct dma_heap *heap,
 		memset(page_address(cma_pages), 0, size);
 	}
 
-	helper_buffer->pagecount = nr_pages;
-	helper_buffer->pages = kmalloc_array(helper_buffer->pagecount,
-					     sizeof(*helper_buffer->pages),
-					     GFP_KERNEL);
-	if (!helper_buffer->pages) {
-		ret = -ENOMEM;
+	table = kmalloc(sizeof(*table), GFP_KERNEL);
+	if (!table)
 		goto free_cma;
-	}
 
-	for (pg = 0; pg < helper_buffer->pagecount; pg++)
-		helper_buffer->pages[pg] = &cma_pages[pg];
+	ret = sg_alloc_table(table, 1, GFP_KERNEL);
+	if (ret)
+		goto free_table;
+
+	sg_set_page(table->sgl, cma_pages, size, 0);
 
 	/* create the dmabuf */
 	dmabuf = heap_helper_export_dmabuf(helper_buffer, fd_flags);
 	if (IS_ERR(dmabuf)) {
 		ret = PTR_ERR(dmabuf);
-		goto free_pages;
+		goto free_table;
 	}
 
 	helper_buffer->dmabuf = dmabuf;
 	helper_buffer->priv_virt = cma_pages;
+	helper_buffer->sg_table = table;
 
 	ret = dma_buf_fd(dmabuf, fd_flags);
 	if (ret < 0) {
@@ -126,9 +128,8 @@ static int cma_heap_allocate(struct dma_heap *heap,
 	}
 
 	return ret;
-
-free_pages:
-	kfree(helper_buffer->pages);
+free_table:
+	kfree(table);
 free_cma:
 	cma_release(cma_heap->cma, cma_pages, nr_pages);
 free_buf:

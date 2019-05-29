@@ -36,8 +36,7 @@ struct heap_helper_buffer {
 	struct mutex lock;
 	int vmap_cnt;
 	void *vaddr;
-	pgoff_t pagecount;
-	struct page **pages;
+	struct sg_table *sg_table;
 	struct list_head attachments;
 
 	void (*free)(struct heap_helper_buffer *buffer);

@@ -19,8 +19,7 @@ void init_heap_helper_buffer(struct heap_helper_buffer *buffer,
 	mutex_init(&buffer->lock);
 	buffer->vmap_cnt = 0;
 	buffer->vaddr = NULL;
-	buffer->pagecount = 0;
-	buffer->pages = NULL;
+	buffer->sg_table = NULL;
 	INIT_LIST_HEAD(&buffer->attachments);
 	buffer->free = free;
 }
@@ -42,9 +41,40 @@ EXPORT_SYMBOL_GPL(heap_helper_export_dmabuf);
 
 static void *dma_heap_map_kernel(struct heap_helper_buffer *buffer)
 {
+	struct scatterlist *sg;
+	int i, j;
 	void *vaddr;
+	pgprot_t pgprot;
+	struct sg_table *table = buffer->sg_table;
+	int npages = PAGE_ALIGN(buffer->size) / PAGE_SIZE;
+	struct page **pages = vmalloc(array_size(npages,
+						 sizeof(struct page *)));
+	struct page **tmp = pages;
 
-	vaddr = vmap(buffer->pages, buffer->pagecount, VM_MAP, PAGE_KERNEL);
+	if (!pages)
+		return ERR_PTR(-ENOMEM);
+
+	pgprot = PAGE_KERNEL;
+
+	for_each_sg(table->sgl, sg, table->nents, i) {
+		int npages_this_entry = PAGE_ALIGN(sg->length) / PAGE_SIZE;
+		struct page *page = sg_page(sg);
+
+		WARN_ON(i >= npages);
+		for (j = 0; j < npages_this_entry; j++)
+			*(tmp++) = nth_page(page, j);
+	}
+/* TODO: Comment from Christoph:
+	That being said I really wish we could have a more iterative version
+	of vmap, where the caller does a get_vm_area_caller and then adds
+	each chunk using another call, including the possibility of mapping
+	larger than PAGE_SIZE contigous ones.  Any chance you could look into
+	that?
+*/
+
+	vaddr = vmap(pages, npages, VM_MAP, pgprot);
+	vfree(pages);
+
 	if (!vaddr)
 		return ERR_PTR(-ENOMEM);
 
@@ -85,9 +115,41 @@ static void dma_heap_buffer_vmap_put(struct heap_helper_buffer *buffer)
 	}
 }
 
+static struct sg_table *dup_sg_table(struct sg_table *table)
+{
+	struct sg_table *new_table;
+	int ret, i;
+	struct scatterlist *sg, *new_sg;
+
+	new_table = kzalloc(sizeof(*new_table), GFP_KERNEL);
+	if (!new_table)
+		return ERR_PTR(-ENOMEM);
+
+	ret = sg_alloc_table(new_table, table->nents, GFP_KERNEL);
+	if (ret) {
+		kfree(new_table);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	new_sg = new_table->sgl;
+	for_each_sg(table->sgl, sg, table->nents, i) {
+		memcpy(new_sg, sg, sizeof(*sg));
+		new_sg->dma_address = 0;
+		new_sg = sg_next(new_sg);
+	}
+
+	return new_table;
+}
+
+static void free_duped_table(struct sg_table *table)
+{
+	sg_free_table(table);
+	kfree(table);
+}
+
 struct dma_heaps_attachment {
 	struct device *dev;
-	struct sg_table table;
+	struct sg_table *table;
 	struct list_head list;
 };
 
@@ -95,22 +157,20 @@ static int dma_heap_attach(struct dma_buf *dmabuf,
 			   struct dma_buf_attachment *attachment)
 {
 	struct dma_heaps_attachment *a;
+	struct sg_table *table;
 	struct heap_helper_buffer *buffer = dmabuf->priv;
-	int ret;
 
 	a = kzalloc(sizeof(*a), GFP_KERNEL);
 	if (!a)
 		return -ENOMEM;
 
-	ret = sg_alloc_table_from_pages(&a->table, buffer->pages,
-					buffer->pagecount, 0,
-					buffer->pagecount << PAGE_SHIFT,
-					GFP_KERNEL);
-	if (ret) {
+	table = dup_sg_table(buffer->sg_table);
+	if (IS_ERR(table)) {
 		kfree(a);
-		return ret;
+		return -ENOMEM;
 	}
 
+	a->table = table;
 	a->dev = attachment->dev;
 	INIT_LIST_HEAD(&a->list);
 
@@ -132,8 +192,8 @@ static void dma_heap_detach(struct dma_buf *dmabuf,
 	mutex_lock(&buffer->lock);
 	list_del(&a->list);
 	mutex_unlock(&buffer->lock);
+	free_duped_table(a->table);
 
-	sg_free_table(&a->table);
 	kfree(a);
 }
 
@@ -144,7 +204,7 @@ struct sg_table *dma_heap_map_dma_buf(struct dma_buf_attachment *attachment,
 	struct dma_heaps_attachment *a = attachment->priv;
 	struct sg_table *table;
 
-	table = &a->table;
+	table = a->table;
 
 	if (!dma_map_sg(attachment->dev, table->sgl, table->nents,
 			direction))
@@ -159,35 +219,53 @@ static void dma_heap_unmap_dma_buf(struct dma_buf_attachment *attachment,
 	dma_unmap_sg(attachment->dev, table->sgl, table->nents, direction);
 }
 
-static vm_fault_t dma_heap_vm_fault(struct vm_fault *vmf)
-{
-	struct vm_area_struct *vma = vmf->vma;
-	struct heap_helper_buffer *buffer = vma->vm_private_data;
-
-	if (vmf->pgoff > buffer->pagecount)
-		return VM_FAULT_SIGBUS;
-
-	vmf->page = buffer->pages[vmf->pgoff];
-	get_page(vmf->page);
-
-	return 0;
-}
-
-static const struct vm_operations_struct dma_heap_vm_ops = {
-	.fault = dma_heap_vm_fault,
-};
-
 static int dma_heap_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 {
 	struct heap_helper_buffer *buffer = dmabuf->priv;
+	struct sg_table *table = buffer->sg_table;
+	unsigned long addr = vma->vm_start;
+	unsigned long offset = vma->vm_pgoff * PAGE_SIZE;
+	struct scatterlist *sg;
+	int i;
+	int ret = 0;
 
 	if ((vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) == 0)
 		return -EINVAL;
 
-	vma->vm_ops = &dma_heap_vm_ops;
-	vma->vm_private_data = buffer;
+	mutex_lock(&buffer->lock);
+	/* now map it to userspace */
+	for_each_sg(table->sgl, sg, table->nents, i) {
+		struct page *page = sg_page(sg);
+		unsigned long remainder = vma->vm_end - addr;
+		unsigned long len = sg->length;
 
-	return 0;
+		if (offset >= sg->length) {
+			offset -= sg->length;
+			continue;
+		} else if (offset) {
+			page += offset / PAGE_SIZE;
+			len = sg->length - offset;
+			offset = 0;
+		}
+		len = min(len, remainder);
+		ret = remap_pfn_range(vma, addr, page_to_pfn(page), len,
+				      vma->vm_page_prot);
+		if (ret)
+			goto unlock;
+		addr += len;
+		if (addr >= vma->vm_end) {
+			ret = 0;
+			goto unlock;
+		}
+	}
+unlock:
+	mutex_unlock(&buffer->lock);
+
+	if (ret)
+		pr_err("%s: failure mapping buffer to userspace\n",
+		       __func__);
+
+	return ret;
 }
 
 static void dma_heap_dma_buf_release(struct dma_buf *dmabuf)
@@ -210,7 +288,7 @@ static int dma_heap_dma_buf_begin_cpu_access(struct dma_buf *dmabuf,
 		invalidate_kernel_vmap_range(buffer->vaddr, buffer->size);
 
 	list_for_each_entry(a, &buffer->attachments, list) {
-		dma_sync_sg_for_cpu(a->dev, a->table.sgl, a->table.nents,
+		dma_sync_sg_for_cpu(a->dev, a->table->sgl, a->table->nents,
 				    direction);
 	}
 	mutex_unlock(&buffer->lock);
@@ -230,7 +308,7 @@ static int dma_heap_dma_buf_end_cpu_access(struct dma_buf *dmabuf,
 		flush_kernel_vmap_range(buffer->vaddr, buffer->size);
 
 	list_for_each_entry(a, &buffer->attachments, list) {
-		dma_sync_sg_for_device(a->dev, a->table.sgl, a->table.nents,
+		dma_sync_sg_for_device(a->dev, a->table->sgl, a->table->nents,
 				       direction);
 	}
 	mutex_unlock(&buffer->lock);
