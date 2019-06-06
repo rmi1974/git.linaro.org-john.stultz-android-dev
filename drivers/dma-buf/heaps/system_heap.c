@@ -16,6 +16,7 @@
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/sched/signal.h>
+#include <net/page_pool.h>
 #include <asm/page.h>
 
 #include "heap-helpers.h"
@@ -23,24 +24,29 @@
 struct dma_heap *sys_heap;
 
 
-#define NUM_ORDERS ARRAY_SIZE(orders)
 #define HIGH_ORDER_GFP  (((GFP_HIGHUSER | __GFP_ZERO | __GFP_NOWARN \
 				| __GFP_NORETRY) & ~__GFP_RECLAIM) \
 				| __GFP_COMP)
 #define LOW_ORDER_GFP (GFP_HIGHUSER | __GFP_ZERO | __GFP_COMP)
 static gfp_t order_flags[] = {HIGH_ORDER_GFP, LOW_ORDER_GFP, LOW_ORDER_GFP};
 static const unsigned int orders[] = {8, 4, 0};
+#define NUM_ORDERS ARRAY_SIZE(orders)
+struct page_pool *pools[NUM_ORDERS];
 
 
 static void system_heap_free(struct heap_helper_buffer *buffer)
 {
 	struct sg_table *table = buffer->sg_table;
 	struct scatterlist *sg;
-	int i;
+	int i,j;
 
 	for_each_sg(table->sgl, sg, table->nents, i) {
 		struct page *page = sg_page(sg);
-		__free_pages(page, compound_order(page));
+
+		for (j=0; j < NUM_ORDERS; j++)
+			if (compound_order(page) == orders[j])
+				break;
+		page_pool_put_page(pools[j], page, false);
 	}
 	sg_free_table(table);
 	kfree(table);
@@ -58,8 +64,7 @@ static struct page *alloc_largest_available(unsigned long size,
 			continue;
 		if (max_order < orders[i])
 			continue;
-
-		page = alloc_pages(order_flags[i], orders[i]);
+		page = page_pool_alloc_pages(pools[i], order_flags[i]);
 		if (!page)
 			continue;
 		return page;
@@ -171,6 +176,24 @@ static int system_heap_create(void)
 {
 	struct dma_heap_export_info exp_info;
 	int ret = 0;
+	int i;
+
+	for (i=0; i < NUM_ORDERS; i++) {
+		struct page_pool_params pp;
+
+		memset(&pp, 0, sizeof(pp));
+		pp.order = orders[i];
+		pp.dma_dir = DMA_BIDIRECTIONAL;
+		pools[i] = page_pool_create(&pp);
+
+		if (IS_ERR(pools[i])) {
+			int j;
+			printk("JDB: err, pool creation failed!\n");
+			for (j = 0; j < i; j++)
+				page_pool_destroy(pools[j]);
+			return PTR_ERR(pools[i]);
+		}
+	}
 
 	exp_info.name = "system_heap";
 	exp_info.ops = &system_heap_ops;
