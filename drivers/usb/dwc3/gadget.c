@@ -2386,7 +2386,6 @@ static int dwc3_gadget_ep_reclaim_trb_sg(struct dwc3_ep *dep,
 		struct dwc3_request *req, const struct dwc3_event_depevt *event,
 		int status)
 {
-	struct dwc3_trb *trb = &dep->trb_pool[dep->trb_dequeue];
 	struct scatterlist *sg = req->sg;
 	struct scatterlist *s;
 	unsigned int pending = req->num_pending_sgs;
@@ -2394,7 +2393,7 @@ static int dwc3_gadget_ep_reclaim_trb_sg(struct dwc3_ep *dep,
 	int ret = 0;
 
 	for_each_sg(sg, s, pending, i) {
-		trb = &dep->trb_pool[dep->trb_dequeue];
+		struct dwc3_trb *trb = &dep->trb_pool[dep->trb_dequeue];
 
 		if (trb->ctrl & DWC3_TRB_CTRL_HWO)
 			break;
