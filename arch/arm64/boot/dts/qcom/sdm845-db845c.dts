@@ -757,7 +757,7 @@
 };
 
 &usb_1 {
-//	status = "okay";
+	status = "okay";
 };
 
 &usb_1_dwc3 {
@@ -765,7 +765,7 @@
 };
 
 &usb_1_hsphy {
-//	status = "okay";
+	status = "okay";
 
 	vdd-supply = <&vreg_l1a_0p875>;
 	vdda-pll-supply = <&vreg_l12a_1p8>;
@@ -778,14 +778,14 @@
 };
 
 &usb_1_qmpphy {
-//	status = "okay";
+	status = "okay";
 
 	vdda-phy-supply = <&vreg_l26a_1p2>;
 	vdda-pll-supply = <&vreg_l1a_0p875>;
 };
 
 &usb_2 {
-//	status = "okay";
+	status = "okay";
 };
 
 &usb_2_dwc3 {
@@ -793,7 +793,7 @@
 };
 
 &usb_2_hsphy {
-//	status = "okay";
+	status = "okay";
 
 	vdd-supply = <&vreg_l1a_0p875>;
 	vdda-pll-supply = <&vreg_l12a_1p8>;
@@ -804,7 +804,7 @@
 };
 
 &usb_2_qmpphy {
-//	status = "okay";
+	status = "okay";
 
 	vdda-phy-supply = <&vreg_l26a_1p2>;
 	vdda-pll-supply = <&vreg_l1a_0p875>;
