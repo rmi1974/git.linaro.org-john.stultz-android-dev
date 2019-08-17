@@ -65,7 +65,7 @@ static int hisi_restart_handler(struct notifier_block *this,
 	}
 
 	while (1)
-		cpu_do_idle();
+		mdelay(1);
 
 	return NOTIFY_DONE;
 }
@@ -108,7 +108,7 @@ static int hisi_reboot_probe(struct platform_device *pdev)
 		iounmap(base);
 	}
 
-	arm_pm_restart = NULL;
+//	arm_pm_restart = NULL;
 	return err;
 }
 
@@ -126,3 +126,6 @@ static struct platform_driver hisi_reboot_driver = {
 	},
 };
 module_platform_driver(hisi_reboot_driver);
+
+MODULE_DESCRIPTION("Reset driver for HiSi SoCs");
+MODULE_LICENSE("GPL v2");
