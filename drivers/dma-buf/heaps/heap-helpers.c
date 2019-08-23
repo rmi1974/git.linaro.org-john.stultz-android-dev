@@ -219,52 +219,53 @@ static void dma_heap_unmap_dma_buf(struct dma_buf_attachment *attachment,
 	dma_unmap_sg(attachment->dev, table->sgl, table->nents, direction);
 }
 
-static vm_fault_t dma_heap_vm_fault(struct vm_fault *vmf)
+static int dma_heap_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 {
-	struct vm_area_struct *vma = vmf->vma;
-	struct heap_helper_buffer *buffer = vma->vm_private_data;
+	struct heap_helper_buffer *buffer = dmabuf->priv;
 	struct sg_table *table = buffer->sg_table;
+	unsigned long addr = vma->vm_start;
 	unsigned long offset = vma->vm_pgoff * PAGE_SIZE;
 	struct scatterlist *sg;
 	int i;
+	int ret = 0;
+
+	if ((vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) == 0)
+		return -EINVAL;
 
 	mutex_lock(&buffer->lock);
 	/* now map it to userspace */
 	for_each_sg(table->sgl, sg, table->nents, i) {
 		struct page *page = sg_page(sg);
+		unsigned long remainder = vma->vm_end - addr;
+		unsigned long len = sg->length;
 
 		if (offset >= sg->length) {
 			offset -= sg->length;
 			continue;
-		}
-		if (offset) {
+		} else if (offset) {
 			page += offset / PAGE_SIZE;
+			len = sg->length - offset;
 			offset = 0;
 		}
-		vmf->page = page;
+		len = min(len, remainder);
+		ret = remap_pfn_range(vma, addr, page_to_pfn(page), len,
+				      vma->vm_page_prot);
+		if (ret)
+			goto unlock;
+		addr += len;
+		if (addr >= vma->vm_end) {
+			ret = 0;
+			goto unlock;
+		}
 	}
+unlock:
 	mutex_unlock(&buffer->lock);
 
-	get_page(vmf->page);
+	if (ret)
+		pr_err("%s: failure mapping buffer to userspace\n",
+		       __func__);
 
-	return 0;
-}
-
-static const struct vm_operations_struct dma_heap_vm_ops = {
-	.fault = dma_heap_vm_fault,
-};
-
-static int dma_heap_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
-{
-	struct heap_helper_buffer *buffer = dmabuf->priv;
-
-	if ((vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) == 0)
-		return -EINVAL;
-
-	vma->vm_ops = &dma_heap_vm_ops;
-	vma->vm_private_data = buffer;
-
-	return 0;
+	return ret;
 }
 
 static void dma_heap_dma_buf_release(struct dma_buf *dmabuf)
