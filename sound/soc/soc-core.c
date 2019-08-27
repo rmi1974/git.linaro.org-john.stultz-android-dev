@@ -3211,6 +3211,7 @@ int snd_soc_add_component(struct device *dev,
 
 	snd_soc_component_add(component);
 	snd_soc_try_rebind_card();
+	driver_deferred_probe_trigger();
 
 	return 0;
 
