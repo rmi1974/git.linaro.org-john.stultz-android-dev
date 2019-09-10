@@ -75,6 +75,14 @@ config MMC_SDHCI_IO_ACCESSORS
 	  This is silent Kconfig symbol that is selected by the drivers that
 	  need to overwrite SDHCI IO memory accessors.
 
+config MMC_SDHCI_DUMMY_HELPER
+	bool "Dummy SDHCI  helper"
+	depends on MMC_SDHCI
+        select MMC_SDHCI_IO_ACCESSORS
+        help
+	  This option forces the hidden MMC_SDHCI_IO_ACCESSORS to on.
+
+
 config MMC_SDHCI_BIG_ENDIAN_32BIT_BYTE_SWAPPER
 	bool
 	depends on MMC_SDHCI
