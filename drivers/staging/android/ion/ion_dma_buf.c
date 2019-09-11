@@ -222,6 +222,7 @@ static const struct dma_buf_ops dma_buf_ops = {
 	.begin_cpu_access = ion_dma_buf_begin_cpu_access,
 	.end_cpu_access = ion_dma_buf_end_cpu_access,
 	.map = ion_dma_buf_kmap,
+	.cache_sgt_mapping = true,
 };
 
 struct dma_buf *ion_dmabuf_alloc(struct ion_device *dev, size_t len,
