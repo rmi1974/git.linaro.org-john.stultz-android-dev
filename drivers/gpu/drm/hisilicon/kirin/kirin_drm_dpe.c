@@ -1183,7 +1183,7 @@ static const struct drm_mode_config_funcs dpe_mode_config_funcs = {
 
 DEFINE_DRM_GEM_CMA_FOPS(kirin_drm_fops);
 static struct drm_driver dpe_driver = {
-	.driver_features	= DRIVER_GEM | DRIVER_MODESET | DRIVER_PRIME |
+	.driver_features	= DRIVER_GEM | DRIVER_MODESET |
 				  DRIVER_ATOMIC | DRIVER_RENDER,
 
 	.date			= "20170309",
