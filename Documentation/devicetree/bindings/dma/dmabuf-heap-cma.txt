@@ -1,0 +1,31 @@
+* DMA-BUF CMA Heap
+
+Specifies a CMA region that should be added to the dma-buf heaps
+interface.
+
+Required properties:
+- compatible: Must be "dmabuf-heap-cma"
+- memory-region: phandle to a CMA reserved memory node
+
+Example:
+This example has a camera CMA node in reserved memory, which is then
+referenced by the dmabuf-heap-cma node.
+
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		...
+		cma_camera: cma-camera {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0x24C00000 0x0 0x4000000>;
+			reusable;
+		};
+		...
+	};
+
+       cma_heap {
+               compatible = "dmabuf-heap-cma";
+               memory-region = <&cma_camera>;
+        };
