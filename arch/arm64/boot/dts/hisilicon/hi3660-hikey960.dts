@@ -75,12 +75,23 @@
 		};
 
 		/* global autoconfigured region for contiguous allocations */
-		linux,cma {
+		cma_default: linux,cma {
 			compatible = "shared-dma-pool";
 			reg = <0x0 0x20C00000 0x0 0x4000000>;
 			reusable;
 			linux,cma-default;
 		};
+
+		cma_camera: cma-camera {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0x24C00000 0x0 0x4000000>;
+			reusable;
+		};
+	};
+
+	cma_heap {
+		compatible = "dmabuf-heap-cma";
+		memory-region = <&cma_camera>;
 	};
 
 	reboot-mode-syscon@32100000 {
