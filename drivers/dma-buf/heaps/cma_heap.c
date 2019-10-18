@@ -15,6 +15,9 @@
 #include <linux/errno.h>
 #include <linux/highmem.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
+#include <linux/of_reserved_mem.h>
+#include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/scatterlist.h>
 #include <linux/sched/signal.h>
@@ -162,6 +165,39 @@ static int __add_cma_heap(struct cma *cma, void *data)
 	return 0;
 }
 
+static int cma_heaps_probe(struct platform_device *pdev)
+{
+	struct device_node *np = pdev->dev.of_node;
+	struct cma *cma_area;
+	int ret;
+
+	ret = of_reserved_mem_device_init_by_idx(&pdev->dev, np, 0);
+	if (ret) {
+		pr_err("Error %s(): of_reserved_mem_device_init_by_idx failed!\n", __func__);
+		return ret;
+	}
+
+	cma_area = dev_get_cma_area(&pdev->dev);
+	if (cma_area)
+		ret = __add_cma_heap(cma_area, NULL);
+
+	return ret;
+}
+
+static const struct of_device_id cma_heap_dt_ids[] = {
+	{ .compatible = "dmabuf-heap-cma" },
+	{},
+};
+MODULE_DEVICE_TABLE(of, cma_heap_dt_ids);
+
+static struct platform_driver cma_heaps_driver = {
+	.driver	= {
+		.name		= "CMA Heaps",
+		.of_match_table	= cma_heap_dt_ids,
+	},
+	.probe	= cma_heaps_probe,
+};
+
 static int add_default_cma_heap(void)
 {
 	struct cma *default_cma = dev_get_cma_area(NULL);
@@ -170,7 +206,8 @@ static int add_default_cma_heap(void)
 	if (default_cma)
 		ret = __add_cma_heap(default_cma, NULL);
 
-	return ret;
+	return platform_driver_register(&cma_heaps_driver);
+
 }
 module_init(add_default_cma_heap);
 MODULE_DESCRIPTION("DMA-BUF CMA Heap");
