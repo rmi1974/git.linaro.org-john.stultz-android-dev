@@ -292,6 +292,7 @@ static void adv7511_set_link_config(struct adv7511 *adv7511,
 	unsigned int color_depth;
 	unsigned int input_id;
 
+	printk("JDB: %s\n", __func__);
 	clock_delay = (config->clock_delay + 1200) / 400;
 	color_depth = config->input_color_depth == 8 ? 3
 		    : (config->input_color_depth == 10 ? 1 : 2);
@@ -329,6 +330,8 @@ static void __adv7511_power_on(struct adv7511 *adv7511)
 {
 	adv7511->current_edid_segment = -1;
 
+	printk("JDB: %s (set current_edid_segment = -1)\n", __func__);
+	//dump_stack();
 	regmap_update_bits(adv7511->regmap, ADV7511_REG_POWER,
 			   ADV7511_POWER_POWER_DOWN, 0);
 	if (adv7511->i2c_main->irq) {
@@ -363,6 +366,8 @@ static void __adv7511_power_on(struct adv7511 *adv7511)
 
 static void adv7511_power_on(struct adv7511 *adv7511)
 {
+	printk("JDB: real %s called!\n", __func__);
+
 	__adv7511_power_on(adv7511);
 
 	/*
@@ -372,11 +377,13 @@ static void adv7511_power_on(struct adv7511 *adv7511)
 
 	if (adv7511->type == ADV7533)
 		adv7533_dsi_power_on(adv7511);
+
 	adv7511->powered = true;
 }
 
 static void __adv7511_power_off(struct adv7511 *adv7511)
 {
+	printk("JDB: %s\n", __func__);
 	/* TODO: setup additional power down modes */
 	regmap_update_bits(adv7511->regmap, ADV7511_REG_POWER,
 			   ADV7511_POWER_POWER_DOWN,
@@ -404,6 +411,7 @@ static bool adv7511_hpd(struct adv7511 *adv7511)
 	unsigned int irq0;
 	int ret;
 
+	printk("JDB: %s\n", __func__);
 	ret = regmap_read(adv7511->regmap, ADV7511_REG_INT(0), &irq0);
 	if (ret < 0)
 		return false;
@@ -432,6 +440,7 @@ static void adv7511_hpd_work(struct work_struct *work)
 	else
 		status = connector_status_disconnected;
 
+	printk("JDB: %s status: %i vs connector.status: %i (powered: %i)\n", __func__, status, adv7511->connector.status, adv7511->powered);
 	/*
 	 * The bridge resets its registers on unplug. So when we get a plug
 	 * event and we're already supposed to be powered, cycle the bridge to
@@ -440,11 +449,13 @@ static void adv7511_hpd_work(struct work_struct *work)
 	if (status == connector_status_connected &&
 	    adv7511->connector.status == connector_status_disconnected &&
 	    adv7511->powered) {
+		printk("JDB: %s powered on but connected and states disagree\n", __func__);
 		regcache_mark_dirty(adv7511->regmap);
 		adv7511_power_on(adv7511);
 	}
 
 	if (adv7511->connector.status != status) {
+		printk("JDB: %s states disagree, fixing\n", __func__);
 		adv7511->connector.status = status;
 		if (status == connector_status_disconnected)
 			cec_phys_addr_invalidate(adv7511->cec_adap);
@@ -502,6 +513,7 @@ static int adv7511_wait_for_edid(struct adv7511 *adv7511, int timeout)
 {
 	int ret;
 
+	printk("JDB: %s\n", __func__);
 	if (adv7511->i2c_main->irq) {
 		ret = wait_event_interruptible_timeout(adv7511->wq,
 				adv7511->edid_read, msecs_to_jiffies(timeout));
@@ -530,6 +542,8 @@ static int adv7511_get_edid_block(void *data, u8 *buf, unsigned int block,
 	unsigned int i;
 	int ret;
 
+	printk("JDB: %s block: %i edid_segment: %i \n", __func__, block, adv7511->current_edid_segment);
+
 	if (len > 128)
 		return -EINVAL;
 
@@ -540,14 +554,16 @@ static int adv7511_get_edid_block(void *data, u8 *buf, unsigned int block,
 				  &status);
 		if (ret < 0)
 			return ret;
-
+		printk("JDB: %s dcc status =%i\n", __func__, status);
 		if (status != 2) {
 			adv7511->edid_read = false;
 			regmap_write(adv7511->regmap, ADV7511_REG_EDID_SEGMENT,
 				     block);
 			ret = adv7511_wait_for_edid(adv7511, 200);
-			if (ret < 0)
+			if (ret < 0) {
+				printk("JDB: %s wait_for_edid failed!\n", __func__);
 				return ret;
+			}
 		}
 
 		/* Break this apart, hopefully more I2C controllers will
@@ -568,10 +584,14 @@ static int adv7511_get_edid_block(void *data, u8 *buf, unsigned int block,
 		for (i = 0; i < 4; ++i) {
 			ret = i2c_transfer(adv7511->i2c_edid->adapter, xfer,
 					   ARRAY_SIZE(xfer));
-			if (ret < 0)
+			if (ret < 0) {
+				printk("JDB: %s i2c_transfer failed?\n", __func__);
 				return ret;
-			else if (ret != 2)
+			}
+			else if (ret != 2){
+				printk("JDB: %s i2c_transfer failed (ret != 2)?\n", __func__);
 				return -EIO;
+			}
 
 			xfer[1].buf += 64;
 			offset += 64;
@@ -598,6 +618,7 @@ static int adv7511_get_modes(struct adv7511 *adv7511,
 	struct edid *edid;
 	unsigned int count;
 
+	printk("JDB: %s (powered: %i)\n", __func__, adv7511->powered);
 	/* Reading the EDID only works if the device is powered */
 	if (!adv7511->powered) {
 		unsigned int edid_i2c_addr =
@@ -626,6 +647,7 @@ static int adv7511_get_modes(struct adv7511 *adv7511,
 
 	kfree(edid);
 
+	printk("JDB: %s returning %i modes\n", __func__, count);
 	return count;
 }
 
@@ -637,6 +659,7 @@ adv7511_detect(struct adv7511 *adv7511, struct drm_connector *connector)
 	bool hpd;
 	int ret;
 
+	printk("JDB: %s\n", __func__);
 	ret = regmap_read(adv7511->regmap, ADV7511_REG_STATUS, &val);
 	if (ret < 0)
 		return connector_status_disconnected;
@@ -654,6 +677,7 @@ adv7511_detect(struct adv7511 *adv7511, struct drm_connector *connector)
 	 * has to be reinitialized. */
 	if (status == connector_status_connected && hpd && adv7511->powered) {
 		regcache_mark_dirty(adv7511->regmap);
+		printk("JDB: %s calling adv7511_power_on!\n", __func__);
 		adv7511_power_on(adv7511);
 		adv7511_get_modes(adv7511, connector);
 		if (adv7511->status == connector_status_connected)
@@ -665,6 +689,7 @@ adv7511_detect(struct adv7511 *adv7511, struct drm_connector *connector)
 				   ADV7511_REG_POWER2_HPD_SRC_BOTH);
 	}
 
+	printk("JDB: %s setting adv7511->status: %i\n", __func__, status);
 	adv7511->status = status;
 	return status;
 }
@@ -809,6 +834,8 @@ adv7511_connector_detect(struct drm_connector *connector, bool force)
 {
 	struct adv7511 *adv = connector_to_adv7511(connector);
 
+	printk("JDB: %s\n", __func__);
+	//dump_stack();
 	return adv7511_detect(adv, connector);
 }
 
@@ -830,7 +857,7 @@ static struct adv7511 *bridge_to_adv7511(struct drm_bridge *bridge)
 static void adv7511_bridge_enable(struct drm_bridge *bridge)
 {
 	struct adv7511 *adv = bridge_to_adv7511(bridge);
-
+	printk("JDB: %s\n", __func__);
 	adv7511_power_on(adv);
 }
 
@@ -855,6 +882,7 @@ static int adv7511_bridge_attach(struct drm_bridge *bridge)
 	struct adv7511 *adv = bridge_to_adv7511(bridge);
 	int ret;
 
+	printk("JDB: %s\n", __func__);
 	if (!bridge->encoder) {
 		DRM_ERROR("Parent encoder object not found");
 		return -ENODEV;
@@ -922,6 +950,7 @@ static int adv7511_init_regulators(struct adv7511 *adv)
 	unsigned int i;
 	int ret;
 
+	printk("JDB: %s\n", __func__);
 	if (adv->type == ADV7511) {
 		supply_names = adv7511_supply_names;
 		adv->num_supplies = ARRAY_SIZE(adv7511_supply_names);
@@ -1100,6 +1129,7 @@ static int adv7511_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 	unsigned int val;
 	int ret;
 
+	printk("JDB: %s\n", __func__);
 	if (!dev->of_node)
 		return -EINVAL;
 
@@ -1110,6 +1140,7 @@ static int adv7511_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 	adv7511->i2c_main = i2c;
 	adv7511->powered = false;
 	adv7511->status = connector_status_disconnected;
+	printk("JDB: %s adv7511->status set to disconnected (%i)\n", __func__, adv7511->status);
 
 	if (dev->of_node)
 		adv7511->type = (enum adv7511_type)of_device_get_match_data(dev);
