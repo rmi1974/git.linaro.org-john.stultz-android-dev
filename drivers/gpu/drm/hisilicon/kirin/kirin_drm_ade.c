@@ -315,8 +315,8 @@ static void drm_underflow_wq(struct work_struct *work)
 	state = drm_atomic_helper_suspend(drm_dev);
 	drm_atomic_helper_resume(drm_dev, state);
 
-	ade_update_bits(base + LDI_INT_CLR, UNDERFLOW_INT_EN_OFST,
-				MASK(1), 1);
+	ade_update_bits(base + LDI_INT_EN, UNDERFLOW_INT_EN_OFST, MASK(1), 1);
+
 }
 
 static irqreturn_t ade_irq_handler(int irq, void *data)
@@ -336,7 +336,10 @@ static irqreturn_t ade_irq_handler(int irq, void *data)
 		drm_crtc_handle_vblank(crtc);
 	}
 	if (status & BIT(UNDERFLOW_INT_EN_OFST)) {
-		//DRM_ERROR("LDI underflow!");
+		DRM_ERROR("LDI underflow!");
+		ade_update_bits(base + LDI_INT_EN, UNDERFLOW_INT_EN_OFST, MASK(1), 0);
+		ade_update_bits(base + LDI_INT_CLR, UNDERFLOW_INT_EN_OFST,
+				MASK(1), 1);
 		schedule_work(&ctx->display_reset_wq);
 	}
 
