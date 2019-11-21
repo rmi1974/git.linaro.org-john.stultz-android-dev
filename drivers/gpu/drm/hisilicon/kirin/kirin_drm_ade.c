@@ -136,7 +136,7 @@ static void ade_init(struct ade_hw_ctx *ctx)
 	 */
 	ade_update_bits(base + ADE_CTRL, FRM_END_START_OFST,
 			FRM_END_START_MASK, REG_EFFECTIVE_IN_ADEEN_FRMEND);
-	ade_update_bits(base + LDI_INT_EN, UNDERFLOW_INT_EN_OFST, MASK(1), 1);
+//	ade_update_bits(base + LDI_INT_EN, UNDERFLOW_INT_EN_OFST, MASK(1), 1);
 }
 
 static bool ade_crtc_mode_fixup(struct drm_crtc *crtc,
@@ -315,7 +315,7 @@ static void drm_underflow_wq(struct work_struct *work)
 	state = drm_atomic_helper_suspend(drm_dev);
 	drm_atomic_helper_resume(drm_dev, state);
 
-	ade_update_bits(base + LDI_INT_EN, UNDERFLOW_INT_EN_OFST, MASK(1), 1);
+//	ade_update_bits(base + LDI_INT_EN, UNDERFLOW_INT_EN_OFST, MASK(1), 1);
 
 }
 
@@ -335,6 +335,7 @@ static irqreturn_t ade_irq_handler(int irq, void *data)
 				MASK(1), 1);
 		drm_crtc_handle_vblank(crtc);
 	}
+/*
 	if (status & BIT(UNDERFLOW_INT_EN_OFST)) {
 		DRM_ERROR("LDI underflow!");
 		ade_update_bits(base + LDI_INT_EN, UNDERFLOW_INT_EN_OFST, MASK(1), 0);
@@ -342,7 +343,7 @@ static irqreturn_t ade_irq_handler(int irq, void *data)
 				MASK(1), 1);
 		schedule_work(&ctx->display_reset_wq);
 	}
-
+*/
 	return IRQ_HANDLED;
 }
 
