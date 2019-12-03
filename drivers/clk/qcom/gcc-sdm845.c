@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/regmap.h>
 #include <linux/reset-controller.h>
@@ -1314,7 +1315,7 @@ static struct clk_branch gcc_disp_ahb_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "gcc_disp_ahb_clk",
-			.flags = CLK_IS_CRITICAL,
+			.flags = CLK_IS_CRITICAL | CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -1328,6 +1329,7 @@ static struct clk_branch gcc_disp_axi_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "gcc_disp_axi_clk",
+			.flags = CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -3595,6 +3597,24 @@ static const struct clk_rcg_dfs_data gcc_dfs_clocks[] = {
 	DEFINE_RCG_DFS(gcc_qupv3_wrap1_s7_clk),
 };
 
+static void gcc_sdm845_enable_inherited(struct device *dev)
+{
+	static struct clk_branch *inherited_clks[] = {
+		&gcc_disp_ahb_clk,
+		&gcc_disp_axi_clk,
+	};
+	struct clk_hw *hw;
+	int i;
+
+	for(i = 0; i < ARRAY_SIZE(inherited_clks); i++) {
+		int ret = 0;
+		hw = &inherited_clks[i]->clkr.hw;
+		ret = clk_prepare_enable(hw->clk);
+		if (ret < 0)
+			printk("JDB: error initializing clk %i\n", i);
+	}
+}
+
 static int gcc_sdm845_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
@@ -3613,7 +3633,12 @@ static int gcc_sdm845_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	return qcom_cc_really_probe(pdev, &gcc_sdm845_desc, regmap);
+	ret = qcom_cc_really_probe(pdev, &gcc_sdm845_desc, regmap);
+	if (ret)
+		return ret;
+
+	gcc_sdm845_enable_inherited(&pdev->dev);
+	return 0;
 }
 
 static struct platform_driver gcc_sdm845_driver = {
@@ -3621,6 +3646,7 @@ static struct platform_driver gcc_sdm845_driver = {
 	.driver		= {
 		.name	= "gcc-sdm845",
 		.of_match_table = gcc_sdm845_match_table,
+		.sync_state = clk_sync_state,
 	},
 };
 

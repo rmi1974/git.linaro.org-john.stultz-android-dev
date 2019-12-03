@@ -3,6 +3,7 @@
  * Copyright (c) 2018, The Linux Foundation. All rights reserved.
  */
 
+#include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -263,6 +264,7 @@ static struct clk_branch disp_cc_mdss_ahb_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "disp_cc_mdss_ahb_clk",
+			.flags = CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -276,6 +278,7 @@ static struct clk_branch disp_cc_mdss_axi_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "disp_cc_mdss_axi_clk",
+			.flags = CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -294,7 +297,7 @@ static struct clk_branch disp_cc_mdss_byte0_clk = {
 				"disp_cc_mdss_byte0_clk_src",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -330,7 +333,7 @@ static struct clk_branch disp_cc_mdss_byte0_intf_clk = {
 				"disp_cc_mdss_byte0_div_clk_src",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -349,7 +352,7 @@ static struct clk_branch disp_cc_mdss_byte1_clk = {
 				"disp_cc_mdss_byte1_clk_src",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -385,7 +388,7 @@ static struct clk_branch disp_cc_mdss_byte1_intf_clk = {
 				"disp_cc_mdss_byte1_div_clk_src",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -403,7 +406,7 @@ static struct clk_branch disp_cc_mdss_esc0_clk = {
 				"disp_cc_mdss_esc0_clk_src",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -421,7 +424,7 @@ static struct clk_branch disp_cc_mdss_esc1_clk = {
 				"disp_cc_mdss_esc1_clk_src",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -439,7 +442,7 @@ static struct clk_branch disp_cc_mdss_mdp_clk = {
 				"disp_cc_mdss_mdp_clk_src",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -475,7 +478,7 @@ static struct clk_branch disp_cc_mdss_pclk0_clk = {
 				"disp_cc_mdss_pclk0_clk_src",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -494,7 +497,7 @@ static struct clk_branch disp_cc_mdss_pclk1_clk = {
 				"disp_cc_mdss_pclk1_clk_src",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -561,7 +564,7 @@ static struct clk_branch disp_cc_mdss_vsync_clk = {
 				"disp_cc_mdss_vsync_clk_src",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -641,10 +644,41 @@ static const struct of_device_id disp_cc_sdm845_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, disp_cc_sdm845_match_table);
 
+
+static void disp_cc_sdm845_enable_inherited(void)
+{
+	static struct clk_branch *inherited_clks[] = {
+		&disp_cc_mdss_ahb_clk,
+		&disp_cc_mdss_axi_clk,
+		&disp_cc_mdss_byte0_clk,
+		&disp_cc_mdss_byte0_intf_clk,
+		&disp_cc_mdss_byte1_clk,
+		&disp_cc_mdss_byte1_intf_clk,
+		&disp_cc_mdss_esc0_clk,
+		&disp_cc_mdss_esc1_clk,
+		&disp_cc_mdss_mdp_clk,
+		&disp_cc_mdss_pclk0_clk,
+		&disp_cc_mdss_pclk1_clk,
+		&disp_cc_mdss_vsync_clk,
+	};
+
+	struct clk_hw *hw;
+	int i;
+
+	for(i = 0; i < ARRAY_SIZE(inherited_clks); i++) {
+		int ret = 0;
+		hw = &inherited_clks[i]->clkr.hw;
+		ret = clk_prepare_enable(hw->clk);
+		if (ret < 0)
+			printk("JDB: error initializing clk %i\n", i);
+	}
+}
+
 static int disp_cc_sdm845_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
 	struct alpha_pll_config disp_cc_pll0_config = {};
+	int ret = 0;
 
 	regmap = qcom_cc_map(pdev, &disp_cc_sdm845_desc);
 	if (IS_ERR(regmap))
@@ -658,7 +692,13 @@ static int disp_cc_sdm845_probe(struct platform_device *pdev)
 	/* Enable hardware clock gating for DSI and MDP clocks */
 	regmap_update_bits(regmap, 0x8000, 0x7f0, 0x7f0);
 
-	return qcom_cc_really_probe(pdev, &disp_cc_sdm845_desc, regmap);
+	ret = qcom_cc_really_probe(pdev, &disp_cc_sdm845_desc, regmap);
+
+	if (ret < 0)
+		return ret;
+
+	disp_cc_sdm845_enable_inherited();
+	return 0;
 }
 
 static struct platform_driver disp_cc_sdm845_driver = {
@@ -666,6 +706,7 @@ static struct platform_driver disp_cc_sdm845_driver = {
 	.driver		= {
 		.name	= "disp_cc-sdm845",
 		.of_match_table = disp_cc_sdm845_match_table,
+		.sync_state = clk_sync_state,
 	},
 };
 
