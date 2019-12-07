@@ -315,6 +315,7 @@ static int ion_dma_buf_get_flags(struct dma_buf *dmabuf, unsigned long *flags)
 }
 
 static const struct dma_buf_ops dma_buf_ops = {
+	.cache_sgt_mapping = true,
 	.attach = ion_dma_buf_attach,
 	.detach = ion_dma_buf_detatch,
 	.map_dma_buf = ion_map_dma_buf,
