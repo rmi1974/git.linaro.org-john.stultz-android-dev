@@ -1,7 +1,7 @@
 . ${ROOT_DIR}/blueline/build.config.common
 . ${ROOT_DIR}/blueline/build.config.aarch64
 
-BRANCH=v5.5-display
+BRANCH=am-p3-gki
 KERNEL_DIR=blueline
 
 DEFCONFIG=blueline_gki_defconfig
