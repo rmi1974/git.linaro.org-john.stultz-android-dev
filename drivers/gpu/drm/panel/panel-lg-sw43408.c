@@ -20,6 +20,7 @@
 #include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
 #include <drm/drm_print.h>
+#include <drm/drm_dsc.h>
 
 #include <video/mipi_display.h>
 
@@ -397,8 +398,81 @@ poweroff:
 	return err;
 }
 
+static u32 dsi_dsc_rc_buf_thresh[] = {0x0e, 0x1c, 0x2a, 0x38, 0x46, 0x54,
+		0x62, 0x69, 0x70, 0x77, 0x79, 0x7b, 0x7d, 0x7e};
+
+/* 8 BPC, 8BPP as that is used in this panel, we need to add tables for rest */
+struct drm_dsc_rc_range_parameters
+rc_range_params_scr_1[DSC_NUM_BUF_RANGES] = {
+	{  0,  4,   2 },
+	{  0,  4,   0 },
+	{  1,  5,   0 },
+	{  1,  6,  -2 },
+	{  3,  7,  -4 },
+	{  3,  7,  -6 },
+	{  3,  7,  -8 },
+	{  3,  8,  -8 },
+	{  3,  9,  -8 },
+	{  3, 10, -10 },
+	{  5, 10, -10 },
+	{  5, 11, -12 },
+	{  5, 11, -12 },
+	{  9, 12, -12 },
+	{ 12, 13, -12 },
+};
+
+static void lg_fill_dsc_config(struct drm_panel *panel,
+			       struct drm_dsc_config *dsc_cfg)
+{
+	int i;
+
+	// try with hardcode based on dts and then derive these
+	memset(dsc_cfg, 0, sizeof(*dsc_cfg));
+	dsc_cfg->dsc_version_major = 0x11;
+	dsc_cfg->dsc_version_minor = 0;
+	dsc_cfg->rc_model_size = 8192;
+	dsc_cfg->first_line_bpg_offset = 15;
+	dsc_cfg->convert_rgb = true;
+	dsc_cfg->vbr_enable = 0;
+	dsc_cfg->initial_offset = 6144;
+	dsc_cfg->line_buf_depth = 9;
+	dsc_cfg->flatness_min_qp = 3;
+	dsc_cfg->flatness_max_qp = 12;
+	dsc_cfg->rc_quant_incr_limit0 = 11;
+	dsc_cfg->rc_quant_incr_limit1 = 11;
+	dsc_cfg->initial_xmit_delay = dsc_cfg->rc_model_size / 16; // 2*bpp
+	dsc_cfg->block_pred_enable = true;
+	dsc_cfg->slice_count = 1;
+	dsc_cfg->slice_width = 540;
+	dsc_cfg->slice_height = 16;
+	dsc_cfg->bits_per_component = 8;
+	dsc_cfg->pic_width = 1080;
+	dsc_cfg->pic_height = 2160;
+	dsc_cfg->bits_per_pixel = 24;
+	dsc_cfg->slice_chunk_size = dsc_cfg->slice_width; // sw*bpp/8
+	dsc_cfg->simple_422 = 0;
+	dsc_cfg->rc_tgt_offset_high = 3;
+	dsc_cfg->rc_tgt_offset_low = 3;
+	dsc_cfg->rc_edge_factor = 6;
+	dsc_cfg->mux_word_size = 48;            // bpc == 8
+
+	for (i = 0; i < DSC_NUM_BUF_RANGES; i++) {
+		dsc_cfg->rc_range_params[i].range_min_qp =
+			rc_range_params_scr_1[i].range_min_qp;
+		dsc_cfg->rc_range_params[i].range_max_qp =
+			rc_range_params_scr_1[i].range_max_qp;
+		dsc_cfg->rc_range_params[i].range_bpg_offset =
+			rc_range_params_scr_1[i].range_bpg_offset;
+	}
+
+	for (i = 0; i < DSC_NUM_BUF_RANGES -1 ; i++)
+		dsc_cfg->rc_buf_thresh[i] = dsi_dsc_rc_buf_thresh[i];
+}
+
 static int lg_panel_enable(struct drm_panel *panel)
 {
+	struct drm_dsc_pps_infoframe pps;
+	struct drm_dsc_config dsc_cfg;
 	struct panel_info *pinfo = to_panel_info(panel);
 	int ret;
 
@@ -409,6 +483,21 @@ pr_err("In sw43408 panel_enable\n");
 	if (ret) {
 		DRM_DEV_ERROR(panel->drm->dev,
 				"Failed to enable backlight %d\n", ret);
+		return ret;
+	}
+
+	/* Prepare DP SDP PPS header as per DP 1.4 spec, Table 2-123 */
+	drm_dsc_dp_pps_header_init(&pps.pps_header);
+
+	/* Fill the PPS payload bytes as per DSC spec 1.2 Table 4-1 */
+	lg_fill_dsc_config(panel, &dsc_cfg);
+	drm_dsc_compute_rc_parameters(&dsc_cfg);
+	drm_dsc_pps_payload_pack(&pps.pps_payload, &dsc_cfg);
+
+	ret = mipi_dsi_dcs_write(pinfo->link, MIPI_DSI_PPS_LONG_WRITE, &pps.pps_payload, 135);
+	if (ret < 0) {
+		DRM_DEV_ERROR(panel->drm->dev,
+				"failed to set pps: %d\n", ret);
 		return ret;
 	}
 
