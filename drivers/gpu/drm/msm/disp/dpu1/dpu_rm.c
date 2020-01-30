@@ -109,6 +109,9 @@ static void _dpu_rm_hw_destroy(enum dpu_hw_blk_type type, void *hw)
 	case DPU_HW_BLK_INTF:
 		dpu_hw_intf_destroy(hw);
 		break;
+	case DPU_HW_DSC:
+		dpu_hw_dsc_destroy(hw);
+		break;
 	case DPU_HW_BLK_SSPP:
 		/* SSPPs are not managed by the resource manager */
 	case DPU_HW_BLK_TOP:
@@ -162,6 +165,9 @@ static int _dpu_rm_hw_blk_create(
 		break;
 	case DPU_HW_BLK_INTF:
 		hw = dpu_hw_intf_init(id, mmio, cat);
+		break;
+	case DPU_HW_DSC:
+		hw = dpu_hw_dsc_init(id, mmio, cat);
 		break;
 	case DPU_HW_BLK_SSPP:
 		/* SSPPs are not managed by the resource manager */
