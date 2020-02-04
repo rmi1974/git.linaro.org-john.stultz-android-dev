@@ -63,11 +63,6 @@ void dsi_set_output_client(struct drm_device *dev)
 	client = connector->status == connector_status_connected ?
 		OUT_HDMI : OUT_PANEL;
 	if (client != dsi->cur_client) {
-		/* associate bridge and dsi encoder */
-		if (client == OUT_HDMI)
-			encoder->bridge = dsi->bridge;
-		else
-			encoder->bridge = NULL;
 		/*
 		 * set the switch ic to select the HDMI or MIPI_DSI
 		*/
