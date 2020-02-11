@@ -398,6 +398,7 @@ poweroff:
 	return err;
 }
 
+#if 0 //move this to dsi
 static u32 dsi_dsc_rc_buf_thresh[] = {0x0e, 0x1c, 0x2a, 0x38, 0x46, 0x54,
 		0x62, 0x69, 0x70, 0x77, 0x79, 0x7b, 0x7d, 0x7e};
 
@@ -468,12 +469,12 @@ static void lg_fill_dsc_config(struct drm_panel *panel,
 	for (i = 0; i < DSC_NUM_BUF_RANGES -1 ; i++)
 		dsc_cfg->rc_buf_thresh[i] = dsi_dsc_rc_buf_thresh[i];
 }
+#endif
 
 static int lg_panel_enable(struct drm_panel *panel)
 {
-	struct drm_dsc_pps_infoframe pps;
-	struct drm_dsc_config dsc_cfg;
 	struct panel_info *pinfo = to_panel_info(panel);
+	struct drm_dsc_pps_infoframe pps;
 	int ret;
 
 	if (pinfo->enabled)
@@ -486,9 +487,21 @@ pr_err("In sw43408 panel_enable\n");
 		return ret;
 	}
 
-	/* Prepare DP SDP PPS header as per DP 1.4 spec, Table 2-123 */
-	drm_dsc_dp_pps_header_init(&pps.pps_header);
+	if (panel->dsc) {
+		/* this panel uses DSC so send the pps */
+		drm_dsc_compute_rc_parameters(panel->dsc);
+		drm_dsc_pps_payload_pack(&pps.pps_payload, panel->dsc);
+		pr_err("VK: in %s doing pps write now\n", __func__);
+		ret = mipi_dsi_dcs_write(pinfo->link, MIPI_DSI_PPS_LONG_WRITE,
+					 &pps.pps_payload, 135);
+		if (ret < 0) {
+			DRM_DEV_ERROR(panel->drm->dev,
+				      "failed to set pps: %d\n", ret);
+			return ret;
+		}
+	}
 
+#if 0
 	/* Fill the PPS payload bytes as per DSC spec 1.2 Table 4-1 */
 	lg_fill_dsc_config(panel, &dsc_cfg);
 	drm_dsc_compute_rc_parameters(&dsc_cfg);
@@ -501,6 +514,7 @@ pr_err("In sw43408 panel_enable\n");
 		return ret;
 	}
 
+#endif
 	pinfo->enabled = true;
 
 	return 0;

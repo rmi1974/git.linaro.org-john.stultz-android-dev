@@ -178,6 +178,13 @@ struct drm_panel {
 	 * panel notifier list head
 	 */
 	struct blocking_notifier_head nh;
+
+	/**
+	 * @dsc:
+	 *
+	 * Panel DSC pps payload to be sent
+	 */
+	struct drm_dsc_config *dsc;
 };
 
 void drm_panel_init(struct drm_panel *panel, struct device *dev,
