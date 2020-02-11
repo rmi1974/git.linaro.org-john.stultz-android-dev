@@ -109,7 +109,7 @@ static void _dpu_rm_hw_destroy(enum dpu_hw_blk_type type, void *hw)
 	case DPU_HW_BLK_INTF:
 		dpu_hw_intf_destroy(hw);
 		break;
-	case DPU_HW_DSC:
+	case DPU_HW_BLK_DSC:
 		dpu_hw_dsc_destroy(hw);
 		break;
 	case DPU_HW_BLK_SSPP:
@@ -166,7 +166,7 @@ static int _dpu_rm_hw_blk_create(
 	case DPU_HW_BLK_INTF:
 		hw = dpu_hw_intf_init(id, mmio, cat);
 		break;
-	case DPU_HW_DSC:
+	case DPU_HW_BLK_DSC:
 		hw = dpu_hw_dsc_init(id, mmio, cat);
 		break;
 	case DPU_HW_BLK_SSPP:
