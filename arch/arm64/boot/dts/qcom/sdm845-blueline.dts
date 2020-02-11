@@ -622,12 +622,13 @@
 	status = "okay";
 	vdda-supply = <&vdda_mipi_dsi0_1p2>;
 
-	qcom,dsc-enabled;
-	qcom,dsc-slice-height = <16>;
-	qcom,dsc-slice-width = <540>;
-	qcom,dsc-slice-per-pkt = <1>;
-	qcom,dsc-bit-per-component = <8>;
-	qcom,dsc-bit-per-pixel = <8>;
+	qcom,mdss-dsc-enabled;
+	qcom,mdss-slice-height = <16>;
+	qcom,mdss-slice-width = <540>;
+	qcom,mdss-slice-per-pkt = <1>;
+	qcom,mdss-bit-per-component = <8>;
+	qcom,mdss-bit-per-pixel = <8>;
+	qcom,mdss-block-prediction-enable;
 
 	ports {
 		port@1 {
