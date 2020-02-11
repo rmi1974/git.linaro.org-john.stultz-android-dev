@@ -474,7 +474,7 @@ static void lg_fill_dsc_config(struct drm_panel *panel,
 static int lg_panel_enable(struct drm_panel *panel)
 {
 	struct panel_info *pinfo = to_panel_info(panel);
-	struct drm_dsc_pps_infoframe pps;
+	struct drm_dsi_dsc_infoframe pps;
 	int ret;
 
 	if (pinfo->enabled)
@@ -489,11 +489,13 @@ pr_err("In sw43408 panel_enable\n");
 
 	if (panel->dsc) {
 		/* this panel uses DSC so send the pps */
+		drm_dsc_dsi_pps_header_init(&pps.dsc_header);
 		drm_dsc_compute_rc_parameters(panel->dsc);
 		drm_dsc_pps_payload_pack(&pps.pps_payload, panel->dsc);
 		pr_err("VK: in %s doing pps write now\n", __func__);
-		ret = mipi_dsi_dcs_write(pinfo->link, MIPI_DSI_PPS_LONG_WRITE,
-					 &pps.pps_payload, 135);
+		ret = mipi_dsi_dcs_write(pinfo->link,
+					 MIPI_DSI_PPS_LONG_WRITE,
+					 &pps, 135);
 		if (ret < 0) {
 			DRM_DEV_ERROR(panel->drm->dev,
 				      "failed to set pps: %d\n", ret);
