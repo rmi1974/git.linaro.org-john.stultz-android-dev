@@ -281,6 +281,15 @@ int dpu_rm_init(struct dpu_rm *rm,
 		}
 	}
 
+	for (i = 0; i < cat->dsc_count; i++) {
+		rc = _dpu_rm_hw_blk_create(rm, cat, mmio, DPU_HW_BLK_DSC,
+				cat->dsc[i].id, &cat->dsc[i]);
+		if (rc) {
+			DPU_ERROR("failed: dsc hw not available\n");
+			goto fail;
+		}
+	}
+
 	return 0;
 
 fail:
