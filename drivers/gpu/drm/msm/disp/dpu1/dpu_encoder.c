@@ -1025,10 +1025,10 @@ static void dpu_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 		num_lm++;
 	}
 
-	dpu_rm_init_hw_iter(&hw_iter, drm_enc->base.id, DPU_HW_BLK_DSC);
+	//dpu_rm_init_hw_iter(&hw_iter, drm_enc->base.id, DPU_HW_BLK_DSC);
+	dpu_rm_init_hw_iter(&hw_iter, 0, DPU_HW_BLK_DSC);
 	for (i = 0; i < MAX_CHANNELS_PER_ENC; i++) {
 		dpu_enc->hw_dsc[i] = NULL;
-		if (!dpu_rm_get_hw(&dpu_kms->rm, &hw_iter))
 			break;
 		dpu_enc->hw_dsc[i] = (struct dpu_hw_dsc *)hw_iter.hw;
 	}
