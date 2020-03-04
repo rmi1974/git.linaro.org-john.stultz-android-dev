@@ -152,6 +152,7 @@ struct msm_dsi_host {
 	struct regmap *sfpb;
 
 	struct drm_display_mode *mode;
+	struct msm_display_dsc_config *dsc;
 
 	/* connected device info */
 	struct device_node *device_node;
@@ -964,7 +965,63 @@ static void dsi_timing_setup(struct msm_dsi_host *msm_host, bool is_dual_dsi)
 		hdisplay /= 2;
 	}
 
+	if (msm_host->dsc) {
+		struct msm_display_dsc_config *dsc = msm_host->dsc;
+
+		/* update dsc params based on mode */
+		dsc->drm.pic_width = mode->hdisplay;
+		dsc->drm.pic_height = mode->vdisplay;
+	}
+
 	if (msm_host->mode_flags & MIPI_DSI_MODE_VIDEO) {
+
+		if (msm_host->dsc) {
+			struct msm_display_dsc_config *dsc = msm_host->dsc;
+			u32 reg, intf_width, slice_per_intf, width;
+			u32 total_bytes_per_intf;
+
+			/* first calculate dsc parameters and then program
+			 * compress mode registers
+			 */
+			intf_width = hdisplay;
+			slice_per_intf = DIV_ROUND_UP(intf_width, dsc->drm.slice_width);
+
+			/* If slice_per_pkt > slice_per_intf, then use 1
+			 * This can happen during partial update
+			 */
+			if (dsc->slice_per_pkt > slice_per_intf)
+				dsc->slice_per_pkt = 1;
+
+			dsc->bytes_in_slice = DIV_ROUND_UP(dsc->drm.slice_width *
+						      dsi_get_bpp(msm_host->format), 8);
+			total_bytes_per_intf = dsc->bytes_in_slice * slice_per_intf;
+
+			dsc->eol_byte_num = total_bytes_per_intf % 3;
+			dsc->pclk_per_line =  DIV_ROUND_UP(total_bytes_per_intf, 3);
+			dsc->bytes_per_pkt = dsc->bytes_in_slice * dsc->slice_per_pkt;
+			dsc->pkt_per_line = slice_per_intf / dsc->slice_per_pkt;
+
+			width = dsc->pclk_per_line;
+			reg = dsc->bytes_per_pkt << 16;
+			reg |= (0x0b << 8);    /* dtype of compressed image */
+
+			/* pkt_per_line:
+			 * 0 == 1 pkt
+			 * 1 == 2 pkt
+			 * 2 == 4 pkt
+			 * 3 pkt is not supported
+			 * above translates to ffs() - 1
+			 */
+			reg = (ffs(dsc->pkt_per_line) - 1) << 6;
+
+			dsc->eol_byte_num = total_bytes_per_intf % 3;
+			reg |= dsc->eol_byte_num << 4;
+			reg |= 1;
+
+			dsi_write(msm_host,
+				  REG_DSI_VIDEO_COMPRESSION_MODE_CTRL, reg);
+		}
+
 		dsi_write(msm_host, REG_DSI_ACTIVE_H,
 			DSI_ACTIVE_H_START(ha_start) |
 			DSI_ACTIVE_H_END(ha_end));
@@ -983,6 +1040,35 @@ static void dsi_timing_setup(struct msm_dsi_host *msm_host, bool is_dual_dsi)
 			DSI_ACTIVE_VSYNC_VPOS_START(vs_start) |
 			DSI_ACTIVE_VSYNC_VPOS_END(vs_end));
 	} else {		/* command mode */
+		if (msm_host->dsc) {
+			struct msm_display_dsc_config *dsc = msm_host->dsc;
+			u32 reg, reg_ctrl, reg_ctrl2;
+			u32 slice_per_intf, bytes_in_slice, total_bytes_per_intf;
+
+			reg_ctrl = dsi_read(msm_host,
+					REG_DSI_COMMAND_COMPRESSION_MODE_CTRL);
+			reg_ctrl2 = dsi_read(
+					msm_host, REG_DSI_COMMAND_COMPRESSION_MODE_CTRL2);
+
+			slice_per_intf = DIV_ROUND_UP(hdisplay, dsc->drm.slice_width);
+			bytes_in_slice = DIV_ROUND_UP(dsc->drm.slice_width *
+						      dsi_get_bpp(msm_host->format), 8);
+			total_bytes_per_intf = dsc->bytes_in_slice * slice_per_intf;
+			dsc->pkt_per_line = slice_per_intf / dsc->slice_per_pkt;
+			reg = 0x39 << 8;
+			reg = (ffs(dsc->pkt_per_line) - 1) << 6;
+
+			dsc->eol_byte_num = total_bytes_per_intf % 3;
+			reg |= dsc->eol_byte_num << 4;
+			reg |= 1;
+
+			reg_ctrl |= reg;
+			reg_ctrl2 |= bytes_in_slice;
+
+			dsi_write(msm_host, REG_DSI_COMMAND_COMPRESSION_MODE_CTRL, reg_ctrl);
+			dsi_write(msm_host, REG_DSI_COMMAND_COMPRESSION_MODE_CTRL2, reg_ctrl2);
+		}
+
 		/* image data and 1 byte write_memory_start cmd */
 		wc = hdisplay * dsi_get_bpp(msm_host->format) / 8 + 1;
 
@@ -1598,6 +1684,7 @@ static int dsi_host_attach(struct mipi_dsi_host *host,
 					struct mipi_dsi_device *dsi)
 {
 	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
+	struct drm_panel *panel;
 	int ret;
 
 	if (dsi->lanes > msm_host->num_data_lanes)
@@ -1616,6 +1703,10 @@ static int dsi_host_attach(struct mipi_dsi_host *host,
 	DBG("id=%d", msm_host->id);
 	if (msm_host->dev)
 		queue_work(msm_host->workqueue, &msm_host->hpd_work);
+
+	panel = msm_dsi_host_get_panel(host);
+	if (panel)
+		panel->dsc = &msm_host->dsc->drm;
 
 	return 0;
 }
@@ -1737,6 +1828,167 @@ static int dsi_host_parse_lane_data(struct msm_dsi_host *msm_host,
 	return -EINVAL;
 }
 
+static u32 dsi_dsc_rc_buf_thresh[DSC_NUM_BUF_RANGES - 1] = {
+	0x0e, 0x1c, 0x2a, 0x38, 0x46, 0x54, 0x62,
+	0x69, 0x70, 0x77, 0x79, 0x7b, 0x7d, 0x7e
+};
+
+/* only 8bpc, 8bpp added */
+static char min_qp[DSC_NUM_BUF_RANGES] = {
+	0, 0, 1, 1, 3, 3, 3, 3, 3, 3, 5, 5, 5, 7, 13
+};
+
+static char max_qp[DSC_NUM_BUF_RANGES] = {
+	4, 4, 5, 6, 7, 7, 7, 8, 9, 10, 11, 12, 13, 13, 15
+};
+
+static char bpg_offset[DSC_NUM_BUF_RANGES] = {
+	2, 0, 0, -2, -4, -6, -8, -8, -8, -10, -10, -12, -12, -12, -12
+};
+
+static int dsi_populate_dsc_params(struct msm_display_dsc_config *dsc)
+{
+	int i;
+
+	dsc->drm.rc_model_size = 8192;
+	dsc->drm.first_line_bpg_offset = 15;
+	dsc->drm.rc_edge_factor = 6;
+	dsc->drm.rc_tgt_offset_high = 3;
+	dsc->drm.rc_tgt_offset_low = 3;
+	dsc->drm.simple_422 = 0;
+	dsc->drm.convert_rgb = 1;
+	dsc->drm.vbr_enable = 0;
+
+	/* handle only bpp = bpc = 8 */
+	for (i = 0; i < DSC_NUM_BUF_RANGES -1 ; i++)
+                dsc->drm.rc_buf_thresh[i] = dsi_dsc_rc_buf_thresh[i];
+
+	for (i = 0; i < DSC_NUM_BUF_RANGES; i++) {
+		dsc->drm.rc_range_params[i].range_min_qp = min_qp[i];
+		dsc->drm.rc_range_params[i].range_max_qp = max_qp[i];
+		dsc->drm.rc_range_params[i].range_bpg_offset = bpg_offset[i];
+	}
+
+	dsc->drm.initial_offset = 6144;
+	dsc->drm.initial_xmit_delay = 512;
+	dsc->drm.line_buf_depth = dsc->drm.bits_per_component + 1;
+
+	/* bpc 8 */
+	dsc->drm.flatness_min_qp = 3;
+	dsc->drm.flatness_max_qp = 12;
+	dsc->drm.rc_quant_incr_limit0 = 11;
+	dsc->drm.rc_quant_incr_limit1 = 11;
+	dsc->drm.mux_word_size = DSC_MUX_WORD_SIZE_8_10_BPC;
+
+	/* need to call drm_dsc_compute_rc_parameters() so that rest of
+	 * params are calculated
+	 */
+
+	i = dsc->drm.slice_width % 3;
+	switch (i) {
+	case 0:
+		dsc->slice_last_group_size = 2;
+		break;
+
+	case 1:
+		dsc->slice_last_group_size = 0;
+		break;
+
+	case 2:
+		dsc->slice_last_group_size = 0;
+		break;
+
+	default:
+		break;
+	}
+
+	dsc->det_thresh_flatness = 2 << (dsc->drm.bits_per_component - 8);
+
+	return 0;
+}
+
+static int dsi_host_parse_dsc(struct msm_dsi_host *msm_host,
+			      struct device_node *np)
+{
+	struct device *dev = &msm_host->pdev->dev;
+	struct msm_display_dsc_config *dsc;
+	bool is_dsc_enabled;
+	u32 data;
+	int ret;
+
+	is_dsc_enabled = of_property_read_bool(np, "qcom,mdss-dsc-enabled");
+
+	if (!is_dsc_enabled)
+		return 0;
+
+	dsc = kzalloc(sizeof(*dsc), GFP_KERNEL);
+	if (!dsc)
+		return -ENOMEM;
+
+	ret = of_property_read_u32(np, "qcom,mdss-dsc-version", &data);
+	if (ret) {
+		dsc->drm.dsc_version_major = 0x1;
+		dsc->drm.dsc_version_minor = 0x1;
+	} else {
+		dsc->drm.dsc_version_major = (data >> 4) & 0xf;
+		dsc->drm.dsc_version_minor = data & 0xf;
+	}
+
+	ret = of_property_read_u32(np, "qcom,mdss-scr-version", &data);
+	if (ret)
+		dsc->scr_rev = 0;
+	else
+		dsc->scr_rev = data & 0xff;
+
+	ret = of_property_read_u32(np, "qcom,mdss-slice-height", &data);
+	if (ret) {
+		DRM_DEV_ERROR(dev, "failed to read dsc slice height\n");
+		goto err;
+	}
+	dsc->drm.slice_height = data;
+
+	ret = of_property_read_u32(np, "qcom,mdss-slice-width", &data);
+	if (ret) {
+		DRM_DEV_ERROR(dev, "failed to read dsc slice width\n");
+		goto err;
+	}
+	dsc->drm.slice_width = data;
+
+	ret = of_property_read_u32(np, "qcom,mdss-slice-per-pkt", &data);
+	if (ret) {
+		DRM_DEV_ERROR(dev, "failed to read mdss-slice-per-pkt\n");
+		goto err;
+	}
+	dsc->slice_per_pkt = data;
+
+	ret = of_property_read_u32(np, "qcom,mdss-bit-per-component", &data);
+	if (ret) {
+		DRM_DEV_ERROR(dev, "failed to read mdss-bit-per-component\n");
+		goto err;
+	}
+	dsc->drm.bits_per_component = data;
+
+	ret = of_property_read_u32(np, "qcom,mdss-bit-per-pixel", &data);
+	if (ret) {
+		DRM_DEV_ERROR(dev, "failed to read bit-per-pixel\n");
+		goto err;
+	}
+	dsc->drm.bits_per_pixel = data;
+
+	dsc->drm.block_pred_enable = of_property_read_bool(np,
+			 "qcom,mdss-block-prediction-enable");
+
+	dsi_populate_dsc_params(dsc);
+
+	msm_host->dsc = dsc;
+
+	return 0;
+
+err:
+	kfree(dsc);
+	return ret;
+}
+
 static int dsi_host_parse_dt(struct msm_dsi_host *msm_host)
 {
 	struct device *dev = &msm_host->pdev->dev;
@@ -1754,6 +2006,14 @@ static int dsi_host_parse_dt(struct msm_dsi_host *msm_host)
 	if (!endpoint) {
 		DRM_DEV_DEBUG(dev, "%s: no endpoint\n", __func__);
 		return 0;
+	}
+
+	ret = dsi_host_parse_dsc(msm_host, np);
+	if (ret) {
+		DRM_DEV_ERROR(dev, "%s: invalid dsc configuration %d\n",
+			__func__, ret);
+		ret = -EINVAL;
+		goto err;
 	}
 
 	ret = dsi_host_parse_lane_data(msm_host, endpoint);
@@ -2387,6 +2647,13 @@ int msm_dsi_host_power_on(struct mipi_dsi_host *host,
 
 	msm_host->power_on = true;
 	mutex_unlock(&msm_host->dev_mutex);
+
+	if (msm_host->dsc) {
+		struct drm_device *drm = msm_host->dev;
+		struct msm_drm_private *priv = drm->dev_private;
+
+		priv->dsc = msm_host->dsc;
+	}
 
 	return 0;
 
