@@ -9,6 +9,7 @@
 #include "dpu_hw_ctl.h"
 #include "dpu_hw_pingpong.h"
 #include "dpu_hw_intf.h"
+#include "dpu_hw_dsc.h"
 #include "dpu_encoder.h"
 #include "dpu_trace.h"
 
@@ -109,6 +110,9 @@ static void _dpu_rm_hw_destroy(enum dpu_hw_blk_type type, void *hw)
 	case DPU_HW_BLK_INTF:
 		dpu_hw_intf_destroy(hw);
 		break;
+	case DPU_HW_BLK_DSC:
+		dpu_hw_dsc_destroy(hw);
+		break;
 	case DPU_HW_BLK_SSPP:
 		/* SSPPs are not managed by the resource manager */
 	case DPU_HW_BLK_TOP:
@@ -162,6 +166,9 @@ static int _dpu_rm_hw_blk_create(
 		break;
 	case DPU_HW_BLK_INTF:
 		hw = dpu_hw_intf_init(id, mmio, cat);
+		break;
+	case DPU_HW_BLK_DSC:
+		hw = dpu_hw_dsc_init(id, mmio, cat);
 		break;
 	case DPU_HW_BLK_SSPP:
 		/* SSPPs are not managed by the resource manager */
@@ -274,6 +281,15 @@ int dpu_rm_init(struct dpu_rm *rm,
 		}
 	}
 
+	for (i = 0; i < cat->dsc_count; i++) {
+		rc = _dpu_rm_hw_blk_create(rm, cat, mmio, DPU_HW_BLK_DSC,
+				cat->dsc[i].id, &cat->dsc[i]);
+		if (rc) {
+			DPU_ERROR("failed: dsc hw not available\n");
+			goto fail;
+		}
+	}
+
 	return 0;
 
 fail:
@@ -298,6 +314,7 @@ static bool _dpu_rm_needs_split_display(const struct msm_display_topology *top)
  *      blocks connected to the lm (pp) is available and appropriate
  * @pp: output parameter, pingpong block attached to the layer mixer.
  *      NULL if pp was not available, or not matching requirements.
+ * @dsc: output parameter, dsc block attached to the layer mixer.
  * @primary_lm: if non-null, this function check if lm is compatible primary_lm
  *              as well as satisfying all other requirements
  * @Return: true if lm matches all requirements, false otherwise
@@ -308,12 +325,14 @@ static bool _dpu_rm_check_lm_and_get_connected_blks(
 		struct dpu_rm_requirements *reqs,
 		struct dpu_rm_hw_blk *lm,
 		struct dpu_rm_hw_blk **pp,
+		struct dpu_rm_hw_blk **dsc,
 		struct dpu_rm_hw_blk *primary_lm)
 {
 	const struct dpu_lm_cfg *lm_cfg = to_dpu_hw_mixer(lm->hw)->cap;
 	struct dpu_rm_hw_iter iter;
 
 	*pp = NULL;
+	*dsc = NULL;
 
 	DPU_DEBUG("check lm %d pp %d\n",
 			   lm_cfg->id, lm_cfg->pingpong);
@@ -355,6 +374,24 @@ static bool _dpu_rm_check_lm_and_get_connected_blks(
 		return false;
 	}
 
+	dpu_rm_init_hw_iter(&iter, 0, DPU_HW_BLK_DSC);
+	while (_dpu_rm_get_hw_locked(rm, &iter)) {
+		if (iter.blk->id == lm_cfg->pingpong) {
+			*dsc = iter.blk;
+			break;
+		}
+	}
+	if (!*dsc) {
+		DPU_ERROR("failed to get dsc on lm %d\n", lm_cfg->pingpong);
+		return false;
+	}
+
+	if (RESERVED_BY_OTHER(*dsc, enc_id)) {
+		DPU_DEBUG("lm %d dsc %d already reserved\n", lm->id,
+				(*dsc)->id);
+		return false;
+	}
+
 	return true;
 }
 
@@ -364,6 +401,7 @@ static int _dpu_rm_reserve_lms(struct dpu_rm *rm, uint32_t enc_id,
 {
 	struct dpu_rm_hw_blk *lm[MAX_BLOCKS];
 	struct dpu_rm_hw_blk *pp[MAX_BLOCKS];
+	struct dpu_rm_hw_blk *dsc[MAX_BLOCKS];
 	struct dpu_rm_hw_iter iter_i, iter_j;
 	int lm_count = 0;
 	int i, rc = 0;
@@ -379,13 +417,14 @@ static int _dpu_rm_reserve_lms(struct dpu_rm *rm, uint32_t enc_id,
 			_dpu_rm_get_hw_locked(rm, &iter_i)) {
 		memset(&lm, 0, sizeof(lm));
 		memset(&pp, 0, sizeof(pp));
+		memset(&dsc, 0, sizeof(dsc));
 
 		lm_count = 0;
 		lm[lm_count] = iter_i.blk;
 
 		if (!_dpu_rm_check_lm_and_get_connected_blks(
 				rm, enc_id, reqs, lm[lm_count],
-				&pp[lm_count], NULL))
+				&pp[lm_count], &dsc[lm_count], NULL))
 			continue;
 
 		++lm_count;
@@ -400,7 +439,7 @@ static int _dpu_rm_reserve_lms(struct dpu_rm *rm, uint32_t enc_id,
 
 			if (!_dpu_rm_check_lm_and_get_connected_blks(
 					rm, enc_id, reqs, iter_j.blk,
-					&pp[lm_count], iter_i.blk))
+					&pp[lm_count], &dsc[lm_count], iter_i.blk))
 				continue;
 
 			lm[lm_count] = iter_j.blk;
@@ -419,6 +458,7 @@ static int _dpu_rm_reserve_lms(struct dpu_rm *rm, uint32_t enc_id,
 
 		lm[i]->enc_id = enc_id;
 		pp[i]->enc_id = enc_id;
+		dsc[i]->enc_id = enc_id;
 
 		trace_dpu_rm_reserve_lms(lm[i]->id, enc_id, pp[i]->id);
 	}
