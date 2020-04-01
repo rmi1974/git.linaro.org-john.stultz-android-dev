@@ -159,7 +159,7 @@ static void dpu_hw_dsc_config_thresh(struct dpu_hw_dsc *hw_dsc,
 }
 
 static struct dpu_dsc_cfg *_dsc_offset(enum dpu_dsc dsc,
-				       struct dpu_mdss_cfg *m,
+				       const struct dpu_mdss_cfg *m,
 				       void __iomem *addr,
 				       struct dpu_hw_blk_reg_map *b)
 {
