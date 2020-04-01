@@ -52,7 +52,7 @@ CONFIG_SWP_EMULATION=y
 CONFIG_CP15_BARRIER_EMULATION=y
 CONFIG_SETEND_EMULATION=y
 CONFIG_RANDOMIZE_BASE=y
-CONFIG_CMDLINE="earlycon console=ttyMSM0,115200n8 firmware_class.path=/vendor/firmware/ androidboot.hardware=pixel3_mainline init=/init androidboot.boot_devices=soc/1d84000.ufshc androidboot.serialno=89EX09405 printk.devkmsg=on androidboot.super_partition=system_b"
+CONFIG_CMDLINE="earlycon console=ttyMSM0,115200n8 firmware_class.path=/vendor/firmware/ androidboot.hardware=pixel3_mainline init=/init androidboot.boot_devices=soc@0/1d84000.ufshc androidboot.serialno=89EX09405 printk.devkmsg=on androidboot.super_partition=system_b"
 CONFIG_CMDLINE_FORCE=y
 CONFIG_HIBERNATION=y
 CONFIG_PM_WAKELOCKS=y
@@ -543,7 +543,6 @@ CONFIG_DRM_LOAD_EDID_FIRMWARE=y
 CONFIG_DRM_MSM=y
 CONFIG_DRM_PANEL_SIMPLE=y
 CONFIG_DRM_PANEL_LG_SW43408=y
-CONFIG_DRM_LONTIUM_LT9611=y
 CONFIG_DRM_I2C_ADV7511=y
 CONFIG_DRM_I2C_ADV7511_AUDIO=y
 CONFIG_FB_ARMCLCD=y
