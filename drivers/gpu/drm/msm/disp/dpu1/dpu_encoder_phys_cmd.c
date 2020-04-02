@@ -237,6 +237,8 @@ static int _dpu_encoder_phys_cmd_wait_for_idle(
 	struct dpu_encoder_wait_info wait_info;
 	int ret;
 
+	printk("JDB: %s called!\n", __func__);
+
 	wait_info.wq = &phys_enc->pending_kickoff_wq;
 	wait_info.atomic_cnt = &phys_enc->pending_kickoff_cnt;
 	wait_info.timeout_ms = KICKOFF_TIMEOUT_MS;
@@ -275,7 +277,7 @@ static int dpu_encoder_phys_cmd_control_vblank_irq(
 		goto end;
 	}
 
-	DRM_DEBUG_KMS("id:%u pp:%d enable=%s/%d\n", DRMID(phys_enc->parent),
+	printk("JDB: %s id:%u pp:%d enable=%s/%d\n", __func__, DRMID(phys_enc->parent),
 		      phys_enc->hw_pp->idx - PINGPONG_0,
 		      enable ? "true" : "false", refcount);
 
@@ -303,6 +305,7 @@ static void dpu_encoder_phys_cmd_irq_control(struct dpu_encoder_phys *phys_enc,
 			phys_enc->hw_pp->idx - PINGPONG_0,
 			enable, atomic_read(&phys_enc->vblank_refcount));
 
+	printk("JDB: %s\n", __func__);
 	if (enable) {
 		dpu_encoder_helper_register_irq(phys_enc, INTR_IDX_PINGPONG);
 		dpu_encoder_helper_register_irq(phys_enc, INTR_IDX_UNDERRUN);
@@ -560,7 +563,7 @@ static void dpu_encoder_phys_cmd_prepare_for_kickoff(
 		DPU_ERROR("invalid encoder\n");
 		return;
 	}
-	DRM_DEBUG_KMS("id:%u pp:%d pending_cnt:%d\n", DRMID(phys_enc->parent),
+	DRM_DEBUG_KMS("JDB: %s id:%u pp:%d pending_cnt:%d\n", __func__, DRMID(phys_enc->parent),
 		      phys_enc->hw_pp->idx - PINGPONG_0,
 		      atomic_read(&phys_enc->pending_kickoff_cnt));
 
@@ -609,7 +612,7 @@ static int dpu_encoder_phys_cmd_wait_for_tx_complete(
 		struct dpu_encoder_phys *phys_enc)
 {
 	int rc;
-
+	printk("JDB: %s\n", __func__);
 	rc = _dpu_encoder_phys_cmd_wait_for_idle(phys_enc);
 	if (rc) {
 		DRM_ERROR("failed wait_for_idle: id:%u ret:%d intf:%d\n",

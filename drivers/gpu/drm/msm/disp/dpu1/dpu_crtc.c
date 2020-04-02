@@ -289,6 +289,8 @@ void dpu_crtc_vblank_callback(struct drm_crtc *crtc)
 {
 	struct dpu_crtc *dpu_crtc = to_dpu_crtc(crtc);
 
+	printk("JDB: %s\n", __func__);
+
 	/* keep statistics on vblank callback - with auto reset via debugfs */
 	if (ktime_compare(dpu_crtc->vblank_cb_time, ktime_set(0, 0)) == 0)
 		dpu_crtc->vblank_cb_time = ktime_get();
@@ -1050,6 +1052,7 @@ int dpu_crtc_vblank(struct drm_crtc *crtc, bool en)
 	struct dpu_crtc *dpu_crtc = to_dpu_crtc(crtc);
 	struct drm_encoder *enc;
 
+	printk("JDB: %s\n", __func__);
 	trace_dpu_crtc_vblank(DRMID(&dpu_crtc->base), en, dpu_crtc);
 
 	/*

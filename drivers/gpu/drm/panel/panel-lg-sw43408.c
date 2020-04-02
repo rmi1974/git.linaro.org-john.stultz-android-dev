@@ -182,6 +182,7 @@ static int panel_set_pinctrl_state(struct panel_info *panel, bool enable)
 	int rc = 0;
 	struct pinctrl_state *state;
 
+	printk("JDB: %s\n", __func__);
 	if (enable)
 		state = panel->active;
 	else
@@ -212,6 +213,7 @@ static int lg_panel_power_off(struct drm_panel *panel)
 {
 	struct panel_info *pinfo = to_panel_info(panel);
 	int i, ret = 0;
+	printk("JDB: %s\n", __func__);
 pr_err("In sw43408 panel_power_off\n");
 	gpiod_set_value(pinfo->reset_gpio, 0);
 
@@ -241,6 +243,7 @@ pr_err("In sw43408 panel_power_off\n");
 
 static int lg_panel_unprepare(struct drm_panel *panel)
 {
+	printk("JDB: %s\n", __func__);
 pr_err("In sw43408 panel_unprepare\n");
 /* HACK : Currently, after a suspend, the resume doesn't enable screen, so
  *        don't disable the panel until we figure out why that is.
@@ -285,6 +288,7 @@ return 0;
 static int lg_panel_power_on(struct panel_info *pinfo)
 {
 	int ret, i;
+	printk("JDB: %s\n", __func__);
 pr_err("In sw43408 panel_power_on\n");
 	for (i = 0; i < ARRAY_SIZE(pinfo->supplies); i++) {
 		ret = regulator_set_load(pinfo->supplies[i].consumer,
@@ -322,6 +326,7 @@ static int lg_panel_prepare(struct drm_panel *panel)
 {
 	struct panel_info *pinfo = to_panel_info(panel);
 	int err;
+	printk("JDB: %s\n", __func__);
 pr_err("In sw43408 panel_prepare\n");
 
 	if (unlikely(pinfo->first_enable)) {
@@ -402,6 +407,7 @@ static int lg_panel_enable(struct drm_panel *panel)
 	struct panel_info *pinfo = to_panel_info(panel);
 	struct drm_dsi_dsc_infoframe pps;
 	int ret;
+	printk("JDB: %s\n", __func__);
 
 	if (pinfo->enabled)
 		return 0;
@@ -440,6 +446,7 @@ static int lg_panel_get_modes(struct drm_panel *panel,
 	struct panel_info *pinfo = to_panel_info(panel);
 	const struct drm_display_mode *m = pinfo->desc->display_mode;
 	struct drm_display_mode *mode;
+	printk("JDB: %s\n", __func__);
 pr_err("In sw43408 panel_get_modes\n");
 	mode = drm_mode_duplicate(connector->dev, m);
 	if (!mode) {
@@ -461,6 +468,7 @@ static int lg_panel_backlight_update_status(struct backlight_device *bl)
 {
 	struct panel_info *pinfo = bl_get_data(bl);
 	int ret = 0;
+	printk("JDB: %s\n", __func__);
 
 	if (bl->props.power != FB_BLANK_UNBLANK ||
 	    bl->props.fb_blank != FB_BLANK_UNBLANK ||
@@ -485,6 +493,7 @@ static int lg_panel_backlight_get_brightness(struct backlight_device *bl)
 	int ret = 0;
 	u16 brightness = 0;
 
+	printk("JDB: %s\n", __func__);
 	ret = mipi_dsi_dcs_get_display_brightness(pinfo->link, &brightness);
 pr_err("sw43408: panel_backlight_get_brightness: current brightness is: %d, ret: %d\n", brightness, ret);
 	if (ret < 0)
@@ -503,12 +512,13 @@ static int lg_panel_backlight_init(struct panel_info *pinfo)
 	struct backlight_properties props = {};
 	struct backlight_device	*bl;
 	struct device *dev = &pinfo->link->dev;
+	printk("JDB: %s\n", __func__);
 
 pr_err("sw43408: panel_backlight_init\n");
 	props.type = BACKLIGHT_RAW;
 
 	// Set the max_brightness to 255 to begin with
-	props.max_brightness = pinfo->max_brightness = 255;
+	props.max_brightness = pinfo->max_brightness = 155;
 	props.brightness = pinfo->max_brightness;
 	pinfo->brightness = pinfo->max_brightness;
 	bl = devm_backlight_device_register(dev, "lg-sw43408", dev, pinfo,
@@ -609,6 +619,7 @@ static int panel_pinctrl_init(struct panel_info *panel)
 	struct device *dev = &panel->link->dev;
 	int rc = 0;
 
+	printk("JDB: %s\n", __func__);
 	panel->pinctrl = devm_pinctrl_get(dev);
 	if (IS_ERR_OR_NULL(panel->pinctrl)) {
 		rc = PTR_ERR(panel->pinctrl);
@@ -641,6 +652,7 @@ static int panel_add(struct panel_info *pinfo)
 {
 	struct device *dev = &pinfo->link->dev;
 	int i, ret;
+	printk("JDB: %s\n", __func__);
 pr_err("In sw43408 panel add\n");
 
 	pinfo->init_delay_us = 5000;
@@ -691,6 +703,7 @@ static int panel_probe(struct mipi_dsi_device *dsi)
 	const struct panel_desc *desc;
 	int err;
 
+	printk("JDB: %s\n", __func__);
 	pinfo = devm_kzalloc(&dsi->dev, sizeof(*pinfo), GFP_KERNEL);
 	if (!pinfo)
 		return -ENOMEM;
@@ -719,6 +732,7 @@ static int panel_remove(struct mipi_dsi_device *dsi)
 	struct panel_info *pinfo = mipi_dsi_get_drvdata(dsi);
 	int err;
 
+	printk("JDB: %s\n", __func__);
 	err = lg_panel_unprepare(&pinfo->base);
 	if (err < 0)
 		DRM_DEV_ERROR(&dsi->dev, "failed to unprepare panel: %d\n",
@@ -742,6 +756,7 @@ static int panel_remove(struct mipi_dsi_device *dsi)
 static void panel_shutdown(struct mipi_dsi_device *dsi)
 {
 	struct panel_info *pinfo = mipi_dsi_get_drvdata(dsi);
+	printk("JDB: %s\n", __func__);
 pr_err("sw43408: panel_shutdown\n");
 	lg_panel_disable(&pinfo->base);
 	lg_panel_unprepare(&pinfo->base);

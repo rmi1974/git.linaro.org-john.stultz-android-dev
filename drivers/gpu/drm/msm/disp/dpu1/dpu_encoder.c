@@ -1199,6 +1199,7 @@ static void dpu_encoder_virt_disable(struct drm_encoder *drm_enc)
 	struct dpu_kms *dpu_kms;
 	int i = 0;
 
+	printk("JDB: %s\n", __func__);
 	if (!drm_enc) {
 		DPU_ERROR("invalid encoder\n");
 		return;
@@ -1363,6 +1364,7 @@ static void dpu_encoder_frame_done_callback(
 	struct dpu_encoder_virt *dpu_enc = to_dpu_encoder_virt(drm_enc);
 	unsigned int i;
 
+	printk("JDB: %s\n", __func__);
 	if (event & (DPU_ENCODER_FRAME_EVENT_DONE
 			| DPU_ENCODER_FRAME_EVENT_ERROR
 			| DPU_ENCODER_FRAME_EVENT_PANEL_DEAD)) {
@@ -1387,6 +1389,7 @@ static void dpu_encoder_frame_done_callback(
 		}
 
 		if (!dpu_enc->frame_busy_mask[0]) {
+			printk("JDB: %s ending frame timeout!\n", __func__);
 			atomic_set(&dpu_enc->frame_done_timeout_ms, 0);
 			del_timer(&dpu_enc->frame_done_timer);
 
@@ -1995,6 +1998,7 @@ void dpu_encoder_kickoff(struct drm_encoder *drm_enc)
 	timeout_ms = DPU_ENCODER_FRAME_DONE_TIMEOUT_FRAMES * 1000 /
 			drm_mode_vrefresh(&drm_enc->crtc->state->adjusted_mode);
 
+	printk("JDB: %s  timeout_ms: %ld\n", __func__, timeout_ms);
 	atomic_set(&dpu_enc->frame_done_timeout_ms, timeout_ms);
 	mod_timer(&dpu_enc->frame_done_timer,
 			jiffies + msecs_to_jiffies(timeout_ms));
@@ -2290,7 +2294,7 @@ static void dpu_encoder_frame_done_timeout(struct timer_list *t)
 			frame_done_timer);
 	struct drm_encoder *drm_enc = &dpu_enc->base;
 	u32 event;
-
+	printk("JDB: %s :(\n", __func__);
 	if (!drm_enc->dev) {
 		DPU_ERROR("invalid parameters\n");
 		return;

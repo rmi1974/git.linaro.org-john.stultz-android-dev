@@ -1509,8 +1509,10 @@ void drm_atomic_helper_wait_for_flip_done(struct drm_device *dev,
 				  crtc->base.id, crtc->name);
 	}
 
-	if (old_state->fake_commit)
+	if (old_state->fake_commit) {
+		printk("JDB: %s fake commit complete all flip_done!\n", __func__);
 		complete_all(&old_state->fake_commit->flip_done);
+	}
 }
 EXPORT_SYMBOL(drm_atomic_helper_wait_for_flip_done);
 
@@ -2052,12 +2054,14 @@ int drm_atomic_helper_setup_commit(struct drm_atomic_state *state,
 		 * new CRTC state is active. Complete right away if everything
 		 * stays off. */
 		if (!old_crtc_state->active && !new_crtc_state->active) {
+			printk("JDB: %s active complete all flip_done!\n", __func__);
 			complete_all(&commit->flip_done);
 			continue;
 		}
 
 		/* Legacy cursor updates are fully unsynced. */
 		if (state->legacy_cursor_update) {
+			printk("JDB: %s cursor update complete all flip_done!\n", __func__);
 			complete_all(&commit->flip_done);
 			continue;
 		}
@@ -2288,6 +2292,7 @@ void drm_atomic_helper_commit_hw_done(struct drm_atomic_state *old_state)
 	if (old_state->fake_commit) {
 		complete_all(&old_state->fake_commit->hw_done);
 		complete_all(&old_state->fake_commit->flip_done);
+		printk("JDB: %s fake commit complete all flip_done!\n", __func__);
 	}
 }
 EXPORT_SYMBOL(drm_atomic_helper_commit_hw_done);
