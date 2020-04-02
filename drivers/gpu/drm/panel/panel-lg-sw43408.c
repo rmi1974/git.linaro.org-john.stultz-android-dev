@@ -322,11 +322,21 @@ pr_err("In sw43408 panel_power_on\n");
 	return 0;
 }
 
+static const struct panel_cmd lg_sw43408_nolp_cmds[] = {
+	_INIT_CMD(0x00, 0xB0, 0xAC),
+	_INIT_CMD(0x00, 0xB4,
+			0x2A, 0x02, 0x25, 0x22, 0x41, 0x41, 0x41, 0x0A,
+			0x10, 0x50, 0x11, 0x00),
+	_INIT_CMD(0x00, 0xCB, 0x80, 0x5C, 0x07, 0x03, 0x28),
+	_INIT_CMD(0x00, 0x03, 0x51, 0x00, 0x00),
+	{},
+};
+
+
 static int lg_panel_prepare(struct drm_panel *panel)
 {
 	struct panel_info *pinfo = to_panel_info(panel);
 	int err;
-	printk("JDB: %s\n", __func__);
 pr_err("In sw43408 panel_prepare\n");
 
 	if (unlikely(pinfo->first_enable)) {
@@ -391,9 +401,31 @@ pr_err("In sw43408 panel_prepare\n");
 	}
 
 	/* 0x32 = 50ms delay */
-	msleep(120);
+	msleep(150);
 
 	pinfo->prepared = true;
+
+	err = mipi_dsi_dcs_write(pinfo->link, 0x22, NULL, 0);
+	if (err < 0) {
+		DRM_DEV_ERROR(panel->dev,
+				"failed to start nolp mode: %d\n", err);
+		goto poweroff;
+	}
+
+	err = send_mipi_cmds(panel, lg_sw43408_nolp_cmds);
+        if (err < 0) {
+                DRM_DEV_ERROR(panel->dev,
+                                "failed to send nolp codes: %d\n", err);
+                goto poweroff;
+        }
+
+	err = mipi_dsi_dcs_write(pinfo->link, MIPI_DCS_ENTER_NORMAL_MODE, NULL, 0);
+	if (err < 0) {
+		DRM_DEV_ERROR(panel->dev,
+				"failed to start nolp mode: %d\n", err);
+		goto poweroff;
+	}
+	msleep(60);
 
 	return 0;
 
