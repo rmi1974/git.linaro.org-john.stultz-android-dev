@@ -60,6 +60,7 @@ struct lt9611 {
 	struct gpio_desc *enable_gpio;
 
 	bool power_on;
+	bool sleep;
 
 	struct regulator_bulk_data supplies[2];
 
@@ -473,6 +474,7 @@ static void lt9611_sleep_setup(struct lt9611 *lt9611)
 	dev_err(lt9611->dev, "sleep\n");
 
 	regmap_multi_reg_write(lt9611->regmap, sleep_setup, ARRAY_SIZE(sleep_setup));
+	lt9611->sleep = true;
 }
 
 static int lt9611_power_on(struct lt9611 *lt9611)
@@ -890,7 +892,13 @@ static void lt9611_bridge_pre_enable(struct drm_bridge *bridge)
 
 	dev_dbg(lt9611->dev, "bridge pre_enable\n");
 
+	if (!lt9611->sleep)
+		return 0;
+
+	lt9611_reset(lt9611);
 	regmap_write(lt9611->regmap, 0x80ee, 0x01);
+
+	lt9611->sleep = false;
 }
 
 static void lt9611_bridge_post_disable(struct drm_bridge *bridge)
@@ -899,7 +907,7 @@ static void lt9611_bridge_post_disable(struct drm_bridge *bridge)
 
 	dev_dbg(lt9611->dev, "bridge post_disable\n");
 
-	//lt9611_sleep_setup(lt9611);
+	lt9611_sleep_setup(lt9611);
 }
 
 static void lt9611_bridge_mode_set(struct drm_bridge *bridge,
@@ -913,6 +921,8 @@ static void lt9611_bridge_mode_set(struct drm_bridge *bridge,
 	dev_dbg(lt9611->dev, "bridge mode_set: hdisplay=%d, vdisplay=%d, vrefresh=%d, clock=%d\n",
 		adj_mode->hdisplay, adj_mode->vdisplay,
 		adj_mode->vrefresh, adj_mode->clock);
+
+	lt9611_bridge_pre_enable(bridge);
 
 	lt9611_mipi_input_digital(lt9611, mode);
 	lt9611_pll_setup(lt9611, mode);
@@ -930,7 +940,7 @@ static const struct drm_bridge_funcs lt9611_bridge_funcs = {
 	.attach = lt9611_bridge_attach,
 	.detach = lt9611_bridge_detach,
 	.mode_valid = lt9611_bridge_mode_valid,
-	.pre_enable   = lt9611_bridge_pre_enable,
+//	.pre_enable   = lt9611_bridge_pre_enable,
 	.enable = lt9611_bridge_enable,
 	.disable = lt9611_bridge_disable,
 	.post_disable = lt9611_bridge_post_disable,
@@ -1092,6 +1102,7 @@ static int lt9611_probe(struct i2c_client *client,
 
 	lt9611->dev = &client->dev;
 	lt9611->client = client;
+	lt9611->sleep = false;
 
 	lt9611->regmap = devm_regmap_init_i2c(client, &lt9611_regmap_config);
 	if (IS_ERR(lt9611->regmap)) {
