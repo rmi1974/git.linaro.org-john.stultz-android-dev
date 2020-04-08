@@ -86,6 +86,7 @@ static const struct regmap_range_cfg lt9611_ranges[] = {
 		.window_len = 0x100,
 	},
 };
+
 static const struct regmap_config lt9611_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
@@ -171,12 +172,14 @@ static void lt9611_mipi_video_setup(struct lt9611 *lt9611,
 	h_act = mode->hdisplay;
 	hpw = mode->hsync_end - mode->hsync_start;
 	hfp = mode->hsync_start - mode->hdisplay;
-	hss = (mode->hsync_end - mode->hsync_start) + (mode->htotal - mode->hsync_end);
+	hss = (mode->hsync_end - mode->hsync_start) +
+	      (mode->htotal - mode->hsync_end);
 
 	v_act = mode->vdisplay;
 	vpw = mode->vsync_end - mode->vsync_start;
 	vfp = mode->vsync_start - mode->vdisplay;
-	vss = (mode->vsync_end - mode->vsync_start) + (mode->vtotal - mode->vsync_end);
+	vss = (mode->vsync_end - mode->vsync_start) +
+	      (mode->vtotal - mode->vsync_end);
 
 	regmap_write(lt9611->regmap, 0x830d, (u8)(v_total / 256));
 	regmap_write(lt9611->regmap, 0x830e, (u8)(v_total % 256));
@@ -343,7 +346,7 @@ static int lt9611_video_check(struct lt9611 *lt9611)
 	ret = regmap_read(lt9611->regmap, 0x8383, &temp);
 	if (ret)
 		goto end;
-	h_act_a = (h_act_a + temp)/3;
+	h_act_a = (h_act_a + temp) / 3;
 
 	/* h_act_b */
 	ret = regmap_read(lt9611->regmap, 0x8386, &temp);
@@ -353,10 +356,11 @@ static int lt9611_video_check(struct lt9611 *lt9611)
 	ret = regmap_read(lt9611->regmap, 0x8387, &temp);
 	if (ret)
 		goto end;
-	h_act_b = (h_act_b + temp)/3;
+	h_act_b = (h_act_b + temp) / 3;
 
-	dev_info(lt9611->dev, "video check: h_act_a=%d, h_act_b=%d, v_act=%d, v_total=%d, h_total_sysclk=%d\n",
-		h_act_a, h_act_b, v_act, v_total, h_total_sysclk);
+	dev_info(lt9611->dev,
+		 "video check: h_act_a=%d, h_act_b=%d, v_act=%d, v_total=%d, h_total_sysclk=%d\n",
+		 h_act_a, h_act_b, v_act, v_total, h_total_sysclk);
 
 	return 0;
 
@@ -410,7 +414,8 @@ static irqreturn_t lt9611_irq_thread_handler(int irq, void *dev_id)
 	regmap_read(lt9611->regmap, 0x820f, &irq_flag3);
 	regmap_read(lt9611->regmap, 0x820c, &irq_flag0);
 
-	printk(KERN_ERR "%s() irq_flag0: %#x irq_flag3: %#x\n", __func__, irq_flag0, irq_flag3);
+	printk(KERN_ERR "%s() irq_flag0: %#x irq_flag3: %#x\n",
+	       __func__, irq_flag0, irq_flag3);
 
 	 /* hpd changed low */
 	if (irq_flag3 & 0x80) {
@@ -473,7 +478,8 @@ static void lt9611_sleep_setup(struct lt9611 *lt9611)
 
 	dev_err(lt9611->dev, "sleep\n");
 
-	regmap_multi_reg_write(lt9611->regmap, sleep_setup, ARRAY_SIZE(sleep_setup));
+	regmap_multi_reg_write(lt9611->regmap,
+			       sleep_setup, ARRAY_SIZE(sleep_setup));
 	lt9611->sleep = true;
 }
 
@@ -507,7 +513,7 @@ static int lt9611_power_on(struct lt9611 *lt9611)
 
 	if (lt9611->power_on)
 		return 0;
-	
+
 	dev_dbg(lt9611->dev, "power on\n");
 
 	ret = regmap_multi_reg_write(lt9611->regmap, seq, ARRAY_SIZE(seq));
@@ -623,13 +629,18 @@ static int lt9611_read_edid(struct lt9611 *lt9611)
 	memset(lt9611->edid_buf, 0, EDID_SEG_SIZE);
 
 	regmap_write(lt9611->regmap, 0x8503, 0xc9);
-	regmap_write(lt9611->regmap, 0x8504, 0xa0); /* 0xA0 is EDID device address */
-	regmap_write(lt9611->regmap, 0x8505, 0x00); /* 0x00 is EDID offset address */
-	regmap_write(lt9611->regmap, 0x8506, 0x20); /* length for read */
+
+	/* 0xA0 is EDID device address */
+	regmap_write(lt9611->regmap, 0x8504, 0xa0);
+	/* 0x00 is EDID offset address */
+	regmap_write(lt9611->regmap, 0x8505, 0x00);
+	/* length for read */
+	regmap_write(lt9611->regmap, 0x8506, 0x20);
 	regmap_write(lt9611->regmap, 0x8514, 0x7f);
 
 	for (i = 0 ; i < 8 ; i++) {
-		regmap_write(lt9611->regmap, 0x8505, i * 32); /* offset address */
+		/* offset address */
+		regmap_write(lt9611->regmap, 0x8505, i * 32);
 		regmap_write(lt9611->regmap, 0x8507, 0x36);
 		regmap_write(lt9611->regmap, 0x8507, 0x31);
 		regmap_write(lt9611->regmap, 0x8507, 0x37);
@@ -640,14 +651,15 @@ static int lt9611_read_edid(struct lt9611 *lt9611)
 		if (temp & 0x02) {  /*KEY_DDC_ACCS_DONE=1*/
 			for (j = 0; j < 32; j++) {
 				regmap_read(lt9611->regmap, 0x8583, &temp);
-				lt9611->edid_buf[i*32+j] = temp;
+				lt9611->edid_buf[i * 32 + j] = temp;
 			}
 		} else if (temp & 0x50) { /* DDC No Ack or Abitration lost */
 			dev_err(lt9611->dev, "read edid failed: no ack\n");
 			ret = -EIO;
 			goto end;
 		} else {
-			dev_err(lt9611->dev, "read edid failed: access not done\n");
+			dev_err(lt9611->dev,
+				"read edid failed: access not done\n");
 			ret = -EIO;
 			goto end;
 		}
@@ -661,9 +673,9 @@ end:
 	return ret;
 }
 
-/* TODO: add support for more extenstion blocks */
-static int lt9611_get_edid_block(void *data, u8 *buf, unsigned int block,
-				  size_t len)
+/* TODO: add support for more extension blocks */
+static int
+lt9611_get_edid_block(void *data, u8 *buf, unsigned int block, size_t len)
 {
 	struct lt9611 *lt9611 = data;
 	int ret;
@@ -711,8 +723,9 @@ static int lt9611_connector_get_modes(struct drm_connector *connector)
 	return count;
 }
 
-static enum drm_mode_status lt9611_connector_mode_valid(
-	struct drm_connector *connector, struct drm_display_mode *mode)
+static enum drm_mode_status
+lt9611_connector_mode_valid(struct drm_connector *connector,
+			    struct drm_display_mode *mode)
 {
 	struct lt9611_mode *lt9611_mode = lt9611_find_mode(mode);
 
@@ -765,7 +778,8 @@ static void lt9611_bridge_disable(struct drm_bridge *bridge)
 	}
 }
 
-static struct drm_connector_helper_funcs lt9611_bridge_connector_helper_funcs = {
+static struct
+drm_connector_helper_funcs lt9611_bridge_connector_helper_funcs = {
 	.get_modes = lt9611_connector_get_modes,
 	.mode_valid = lt9611_connector_mode_valid,
 };
@@ -893,7 +907,7 @@ static void lt9611_bridge_pre_enable(struct drm_bridge *bridge)
 	dev_dbg(lt9611->dev, "bridge pre_enable\n");
 
 	if (!lt9611->sleep)
-		return 0;
+		return;
 
 	lt9611_reset(lt9611);
 	regmap_write(lt9611->regmap, 0x80ee, 0x01);
@@ -948,12 +962,11 @@ static const struct drm_bridge_funcs lt9611_bridge_funcs = {
 };
 
 static int lt9611_parse_dt(struct device *dev,
-	struct lt9611 *lt9611)
+			   struct lt9611 *lt9611)
 {
 	lt9611->dsi0_node = of_graph_get_remote_node(dev->of_node, 1, -1);
 	if (!lt9611->dsi0_node) {
-		DRM_DEV_ERROR(dev,
-			"failed to get remote node for primary dsi\n");
+		DRM_DEV_ERROR(dev, "failed to get remote node for primary dsi\n");
 		return -ENODEV;
 	}
 
@@ -975,7 +988,8 @@ static int lt9611_gpio_init(struct lt9611 *lt9611)
 		return PTR_ERR(lt9611->reset_gpio);
 	}
 
-	lt9611->enable_gpio = devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_LOW);
+	lt9611->enable_gpio = devm_gpiod_get_optional(dev, "enable",
+						      GPIOD_OUT_LOW);
 	if (IS_ERR(lt9611->enable_gpio)) {
 		dev_err(dev, "failed to acquire enable gpio\n");
 		return PTR_ERR(lt9611->enable_gpio);
@@ -996,14 +1010,14 @@ static int lt9611_read_device_rev(struct lt9611 *lt9611)
 	if (ret)
 		dev_err(lt9611->dev, "failed to read revision: %d\n", ret);
 
-	dev_info(lt9611->dev, "LT9611 revsion: 0x%x\n", rev);
+	dev_info(lt9611->dev, "LT9611 revision: 0x%x\n", rev);
 
 	return ret;
 }
 
-int lt9611_hdmi_hw_params(struct device *dev, void *data,
-			   struct hdmi_codec_daifmt *fmt,
-			   struct hdmi_codec_params *hparms)
+static int lt9611_hdmi_hw_params(struct device *dev, void *data,
+				 struct hdmi_codec_daifmt *fmt,
+				 struct hdmi_codec_params *hparms)
 {
 	return 0;
 }
@@ -1032,12 +1046,12 @@ static void lt9611_audio_shutdown(struct device *dev, void *data)
 }
 
 static int lt9611_hdmi_i2s_get_dai_id(struct snd_soc_component *component,
-					struct device_node *endpoint)
+				      struct device_node *endpoint)
 {
 	struct of_endpoint of_ep;
 	int ret;
 
-pr_err("DEBUG: %s: %d \n", __func__, __LINE__);
+	pr_debug("In %s: %d\n", __func__, __LINE__);
 	ret = of_graph_parse_endpoint(endpoint, &of_ep);
 	if (ret < 0)
 		return ret;
@@ -1065,18 +1079,18 @@ static struct hdmi_codec_pdata codec_data = {
 	.i2s = 1,
 };
 
-int lt9611_audio_init(struct device *dev, struct lt9611 *lt9611)
+static int lt9611_audio_init(struct device *dev, struct lt9611 *lt9611)
 {
 	codec_data.data = lt9611;
-	lt9611->audio_pdev = platform_device_register_data(dev,
-					HDMI_CODEC_DRV_NAME,
-					PLATFORM_DEVID_AUTO,
-					&codec_data,
-					sizeof(codec_data));
+	lt9611->audio_pdev =
+		platform_device_register_data(dev, HDMI_CODEC_DRV_NAME,
+					      PLATFORM_DEVID_AUTO,
+					      &codec_data, sizeof(codec_data));
+
 	return PTR_ERR_OR_ZERO(lt9611->audio_pdev);
 }
 
-void lt9611_audio_exit(struct lt9611 *lt9611)
+static void lt9611_audio_exit(struct lt9611 *lt9611)
 {
 	if (lt9611->audio_pdev) {
 		platform_device_unregister(lt9611->audio_pdev);
@@ -1085,7 +1099,7 @@ void lt9611_audio_exit(struct lt9611 *lt9611)
 }
 
 static int lt9611_probe(struct i2c_client *client,
-	 const struct i2c_device_id *id)
+			const struct i2c_device_id *id)
 {
 	struct lt9611 *lt9611;
 	struct device *dev = &client->dev;
@@ -1140,7 +1154,6 @@ static int lt9611_probe(struct i2c_client *client,
 		goto err_disable_regulators;
 	}
 
-
 	ret = devm_request_threaded_irq(dev, client->irq, NULL,
 					lt9611_irq_thread_handler,
 					IRQF_ONESHOT, "lt9611", lt9611);
@@ -1184,7 +1197,6 @@ static int lt9611_remove(struct i2c_client *client)
 
 	return 0;
 }
-
 
 static struct i2c_device_id lt9611_id[] = {
 	{ "lt,lt9611", 0},
