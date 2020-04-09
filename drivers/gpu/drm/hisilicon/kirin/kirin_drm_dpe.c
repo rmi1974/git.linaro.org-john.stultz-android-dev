@@ -1211,7 +1211,6 @@ static struct drm_driver dpe_driver = {
 };
 
 const struct kirin_drm_data dpe_driver_data = {
-	.register_connects = true,
 	.num_planes = DPE_CH_NUM,
 	.prim_plane = DPE_CH0,
 
