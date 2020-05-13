@@ -528,6 +528,7 @@ static struct platform_driver clk_rpmh_driver = {
 	.driver		= {
 		.name	= "clk-rpmh",
 		.of_match_table = clk_rpmh_match_table,
+		.sync_state = clk_sync_state,
 	},
 };
 
