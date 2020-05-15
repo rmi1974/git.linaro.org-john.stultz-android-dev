@@ -772,6 +772,18 @@
 		dma-ranges = <0 0 0 0 0x10 0>;
 		compatible = "simple-bus";
 
+		clocks =
+			 <&dsi0_phy 0>,
+			 <&dsi0_phy 1>,
+			 <&dsi1_phy 0>,
+			 <&dsi1_phy 1>;
+		clock-names =
+			      "dsi0_phy_pll_out_byteclk",
+			      "dsi0_phy_pll_out_dsiclk",
+			      "dsi1_phy_pll_out_byteclk",
+			      "dsi1_phy_pll_out_dsiclk";
+		clock-ranges;
+
 		gcc: clock-controller@100000 {
 			compatible = "qcom,gcc-sdm845";
 			reg = <0 0x00100000 0 0x1f0000>;
@@ -3524,19 +3536,11 @@
 			clocks = <&rpmhcc RPMH_CXO_CLK>,
 				 <&gcc GCC_DISP_GPLL0_CLK_SRC>,
 				 <&gcc GCC_DISP_GPLL0_DIV_CLK_SRC>,
-				 <&dsi0_phy 0>,
-				 <&dsi0_phy 1>,
-				 <&dsi1_phy 0>,
-				 <&dsi1_phy 1>,
 				 <0>,
 				 <0>;
 			clock-names = "bi_tcxo",
 				      "gcc_disp_gpll0_clk_src",
 				      "gcc_disp_gpll0_div_clk_src",
-				      "dsi0_phy_pll_out_byteclk",
-				      "dsi0_phy_pll_out_dsiclk",
-				      "dsi1_phy_pll_out_byteclk",
-				      "dsi1_phy_pll_out_dsiclk",
 				      "dp_link_clk_divsel_ten",
 				      "dp_vco_divided_clk_src_mux";
 			#clock-cells = <1>;
