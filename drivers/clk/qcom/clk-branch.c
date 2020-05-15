@@ -99,9 +99,11 @@ static int clk_branch_toggle(struct clk_hw *hw, bool en,
 		bool (check_halt)(const struct clk_branch *, bool))
 {
 	struct clk_branch *br = to_clk_branch(hw);
+	const char *name = clk_hw_get_name(&br->clkr.hw);
 	int ret;
 
 	if (en) {
+		printk("JDB: enabling clk: %s\n", name);
 		ret = clk_enable_regmap(hw);
 		if (ret)
 			return ret;
