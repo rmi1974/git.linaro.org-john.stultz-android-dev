@@ -27,7 +27,7 @@
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/machine.h>
 #include <linux/clk.h>
-
+#include <linux/clk-provider.h>
 
 struct fixed_voltage_data {
 	struct regulator_desc desc;
@@ -280,6 +280,7 @@ static struct platform_driver regulator_fixed_voltage_driver = {
 	.driver		= {
 		.name		= "reg-fixed-voltage",
 		.of_match_table = of_match_ptr(fixed_of_match),
+		.sync_state = clk_sync_state,
 	},
 };
 
