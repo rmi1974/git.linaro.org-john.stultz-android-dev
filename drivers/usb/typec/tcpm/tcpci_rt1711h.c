@@ -159,9 +159,6 @@ static irqreturn_t rt1711h_irq(int irq, void *dev_id)
 	u8 status;
 	struct rt1711h_chip *chip = dev_id;
 
-	if (!chip->tcpci)
-		return IRQ_HANDLED;
-
 	ret = rt1711h_read16(chip, TCPC_ALERT, &alert);
 	if (ret < 0)
 		goto out;
@@ -176,6 +173,9 @@ static irqreturn_t rt1711h_irq(int irq, void *dev_id)
 	}
 
 out:
+	if (!chip->tcpci)
+		return IRQ_HANDLED;
+
 	return tcpci_irq(chip->tcpci);
 }
 
