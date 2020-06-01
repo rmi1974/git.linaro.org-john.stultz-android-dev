@@ -111,6 +111,7 @@ void dwc3_set_prtcap(struct dwc3 *dwc, u32 mode)
 	reg |= DWC3_GCTL_PRTCAPDIR(mode);
 	dwc3_writel(dwc->regs, DWC3_GCTL, reg);
 
+	printk("JDB: %s  current_dr_role set to: %i\n", __func__, mode);
 	dwc->current_dr_role = mode;
 }
 
@@ -204,6 +205,7 @@ void dwc3_set_mode(struct dwc3 *dwc, u32 mode)
 	unsigned long flags;
 
 	spin_lock_irqsave(&dwc->lock, flags);
+	printk("JDB: %s  desired role: %i\n", __func__, mode);
 	dwc->desired_dr_role = mode;
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
@@ -1182,6 +1184,7 @@ static int dwc3_core_init_mode(struct dwc3 *dwc)
 	struct device *dev = dwc->dev;
 	int ret;
 
+	printk("JDB: %s  dr_mode: %i\n", __func__, dwc->dr_mode);
 	switch (dwc->dr_mode) {
 	case USB_DR_MODE_PERIPHERAL:
 		dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_DEVICE);

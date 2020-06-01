@@ -791,6 +791,8 @@ static int tcpm_set_roles(struct tcpm_port *port, bool attached,
 	enum usb_role usb_role;
 	int ret;
 
+	printk("JDB: %s attached: %i role: %i\n", __func__, attached, role);
+
 	if (port->polarity == TYPEC_POLARITY_CC1)
 		orientation = TYPEC_ORIENTATION_NORMAL;
 	else
@@ -2616,6 +2618,7 @@ static int tcpm_init_vconn(struct tcpm_port *port)
 
 static void tcpm_typec_connect(struct tcpm_port *port)
 {
+	printk("JDB: %s\n", __func__);
 	if (!port->connected) {
 		/* Make sure we don't report stale identity information */
 		memset(&port->partner_ident, 0, sizeof(port->partner_ident));

@@ -3003,6 +3003,8 @@ static void dwc3_stop_active_transfer(struct dwc3_ep *dep, bool force,
 	cmd |= DWC3_DEPCMD_PARAM(dep->resource_index);
 	memset(&params, 0, sizeof(params));
 	ret = dwc3_send_gadget_ep_cmd(dep, cmd, &params);
+	if (ret)
+		printk("JDB: %s dwc3_send_gadget_ep_cmd returned %i\n", __func__, ret);
 	WARN_ON_ONCE(ret);
 	dep->resource_index = 0;
 

@@ -75,6 +75,7 @@ static void relay_set_role_switch(struct work_struct *work)
 		return;
 
 	mutex_lock(&hisi_hikey_usb->lock);
+	printk("JDB: %s role: %i!\n", __func__, hisi_hikey_usb->role);
 	switch (hisi_hikey_usb->role) {
 	case USB_ROLE_NONE:
 		usb_typec_power_ctrl(hisi_hikey_usb, TYPEC_VBUS_POWER_OFF);
@@ -105,6 +106,7 @@ static int hub_usb_role_switch_set(struct usb_role_switch *sw, enum usb_role rol
 {
 	struct hisi_hikey_usb *hisi_hikey_usb = usb_role_switch_get_drvdata(sw);
 
+	printk("JDB: %s role: %i!\n", __func__, role);
 	if (!hisi_hikey_usb || !hisi_hikey_usb->dev_role_sw)
 		return -EINVAL;
 
@@ -166,7 +168,7 @@ static int hisi_hikey_usb_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, hisi_hikey_usb);
-
+	printk("JDB: %s complete!\n", __func__);
 	return 0;
 }
 
