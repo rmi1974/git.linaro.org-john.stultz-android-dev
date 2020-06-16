@@ -414,7 +414,7 @@ static irqreturn_t lt9611_irq_thread_handler(int irq, void *dev_id)
 		regmap_write(lt9611->regmap, 0x8207, 0x3f);
 	}
 
-	if (irq_flag3 & 0xc0)
+	if (irq_flag3 & 0xc0 && lt9611->bridge.dev)
 		drm_kms_helper_hotplug_event(lt9611->bridge.dev);
 
 	/* video input changed */
